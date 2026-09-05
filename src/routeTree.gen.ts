@@ -20,73 +20,24 @@ import { Route as AppPermissionsRouteImport } from './routes/_app/permissions'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
+import { Route as AppWhatsappRouteImport } from './routes/_app/whatsapp'
 import { Route as AppLeadsIndexRouteImport } from './routes/_app/leads/index'
 import { Route as AppLeadsLeadIdRouteImport } from './routes/_app/leads/$leadId'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAutomationsRoute = AppAutomationsRouteImport.update({
-  id: '/automations',
-  path: '/automations',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCampaignsRoute = AppCampaignsRouteImport.update({
-  id: '/campaigns',
-  path: '/campaigns',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDashboardRoute = AppDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppInboxRoute = AppInboxRouteImport.update({
-  id: '/inbox',
-  path: '/inbox',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPermissionsRoute = AppPermissionsRouteImport.update({
-  id: '/permissions',
-  path: '/permissions',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTeamRoute = AppTeamRouteImport.update({
-  id: '/team',
-  path: '/team',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTemplatesRoute = AppTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLeadsIndexRoute = AppLeadsIndexRouteImport.update({
-  id: '/leads/',
-  path: '/leads/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({
-  id: '/leads/$leadId',
-  path: '/leads/$leadId',
-  getParentRoute: () => AppRoute,
-} as any)
+const IndexRoute = IndexRouteImport.update({ id: '/', path: '/', getParentRoute: () => rootRouteImport } as any)
+const AppRoute = AppRouteImport.update({ id: '/_app', getParentRoute: () => rootRouteImport } as any)
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({ id: '/analytics', path: '/analytics', getParentRoute: () => AppRoute } as any)
+const AppAutomationsRoute = AppAutomationsRouteImport.update({ id: '/automations', path: '/automations', getParentRoute: () => AppRoute } as any)
+const AppCampaignsRoute = AppCampaignsRouteImport.update({ id: '/campaigns', path: '/campaigns', getParentRoute: () => AppRoute } as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({ id: '/dashboard', path: '/dashboard', getParentRoute: () => AppRoute } as any)
+const AppInboxRoute = AppInboxRouteImport.update({ id: '/inbox', path: '/inbox', getParentRoute: () => AppRoute } as any)
+const AppPermissionsRoute = AppPermissionsRouteImport.update({ id: '/permissions', path: '/permissions', getParentRoute: () => AppRoute } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({ id: '/settings', path: '/settings', getParentRoute: () => AppRoute } as any)
+const AppTeamRoute = AppTeamRouteImport.update({ id: '/team', path: '/team', getParentRoute: () => AppRoute } as any)
+const AppTemplatesRoute = AppTemplatesRouteImport.update({ id: '/templates', path: '/templates', getParentRoute: () => AppRoute } as any)
+const AppWhatsappRoute = AppWhatsappRouteImport.update({ id: '/whatsapp', path: '/whatsapp', getParentRoute: () => AppRoute } as any)
+const AppLeadsIndexRoute = AppLeadsIndexRouteImport.update({ id: '/leads/', path: '/leads/', getParentRoute: () => AppRoute } as any)
+const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({ id: '/leads/$leadId', path: '/leads/$leadId', getParentRoute: () => AppRoute } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -99,9 +50,11 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
   '/templates': typeof AppTemplatesRoute
+  '/whatsapp': typeof AppWhatsappRoute
   '/leads/$leadId': typeof AppLeadsLeadIdRoute
   '/leads/': typeof AppLeadsIndexRoute
 }
+
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AppAnalyticsRoute
@@ -113,9 +66,11 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
   '/templates': typeof AppTemplatesRoute
+  '/whatsapp': typeof AppWhatsappRoute
   '/leads/$leadId': typeof AppLeadsLeadIdRoute
   '/leads': typeof AppLeadsIndexRoute
 }
+
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
@@ -129,9 +84,11 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
   '/_app/templates': typeof AppTemplatesRoute
+  '/_app/whatsapp': typeof AppWhatsappRoute
   '/_app/leads/$leadId': typeof AppLeadsLeadIdRoute
   '/_app/leads/': typeof AppLeadsIndexRoute
 }
+
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
@@ -145,6 +102,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/templates'
+    | '/whatsapp'
     | '/leads/$leadId'
     | '/leads/'
   fileRoutesByTo: FileRoutesByTo
@@ -159,6 +117,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/templates'
+    | '/whatsapp'
     | '/leads/$leadId'
     | '/leads'
   id:
@@ -174,108 +133,28 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/team'
     | '/_app/templates'
+    | '/_app/whatsapp'
     | '/_app/leads/$leadId'
     | '/_app/leads/'
   fileRoutesById: FileRoutesById
 }
-export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRouteWithChildren
-}
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app': {
-      id: '/_app'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/analytics': {
-      id: '/_app/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AppAnalyticsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/automations': {
-      id: '/_app/automations'
-      path: '/automations'
-      fullPath: '/automations'
-      preLoaderRoute: typeof AppAutomationsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/campaigns': {
-      id: '/_app/campaigns'
-      path: '/campaigns'
-      fullPath: '/campaigns'
-      preLoaderRoute: typeof AppCampaignsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/dashboard': {
-      id: '/_app/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AppDashboardRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/inbox': {
-      id: '/_app/inbox'
-      path: '/inbox'
-      fullPath: '/inbox'
-      preLoaderRoute: typeof AppInboxRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/permissions': {
-      id: '/_app/permissions'
-      path: '/permissions'
-      fullPath: '/permissions'
-      preLoaderRoute: typeof AppPermissionsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/settings': {
-      id: '/_app/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/team': {
-      id: '/_app/team'
-      path: '/team'
-      fullPath: '/team'
-      preLoaderRoute: typeof AppTeamRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/templates': {
-      id: '/_app/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof AppTemplatesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/leads/': {
-      id: '/_app/leads/'
-      path: '/leads'
-      fullPath: '/leads/'
-      preLoaderRoute: typeof AppLeadsIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/leads/$leadId': {
-      id: '/_app/leads/$leadId'
-      path: '/leads/$leadId'
-      fullPath: '/leads/$leadId'
-      preLoaderRoute: typeof AppLeadsLeadIdRouteImport
-      parentRoute: typeof AppRoute
-    }
+    '/': { id: '/'; path: '/'; fullPath: '/'; preLoaderRoute: typeof IndexRouteImport; parentRoute: typeof rootRouteImport }
+    '/_app': { id: '/_app'; path: ''; fullPath: '/'; preLoaderRoute: typeof AppRouteImport; parentRoute: typeof rootRouteImport }
+    '/_app/analytics': { id: '/_app/analytics'; path: '/analytics'; fullPath: '/analytics'; preLoaderRoute: typeof AppAnalyticsRouteImport; parentRoute: typeof AppRoute }
+    '/_app/automations': { id: '/_app/automations'; path: '/automations'; fullPath: '/automations'; preLoaderRoute: typeof AppAutomationsRouteImport; parentRoute: typeof AppRoute }
+    '/_app/campaigns': { id: '/_app/campaigns'; path: '/campaigns'; fullPath: '/campaigns'; preLoaderRoute: typeof AppCampaignsRouteImport; parentRoute: typeof AppRoute }
+    '/_app/dashboard': { id: '/_app/dashboard'; path: '/dashboard'; fullPath: '/dashboard'; preLoaderRoute: typeof AppDashboardRouteImport; parentRoute: typeof AppRoute }
+    '/_app/inbox': { id: '/_app/inbox'; path: '/inbox'; fullPath: '/inbox'; preLoaderRoute: typeof AppInboxRouteImport; parentRoute: typeof AppRoute }
+    '/_app/permissions': { id: '/_app/permissions'; path: '/permissions'; fullPath: '/permissions'; preLoaderRoute: typeof AppPermissionsRouteImport; parentRoute: typeof AppRoute }
+    '/_app/settings': { id: '/_app/settings'; path: '/settings'; fullPath: '/settings'; preLoaderRoute: typeof AppSettingsRouteImport; parentRoute: typeof AppRoute }
+    '/_app/team': { id: '/_app/team'; path: '/team'; fullPath: '/team'; preLoaderRoute: typeof AppTeamRouteImport; parentRoute: typeof AppRoute }
+    '/_app/templates': { id: '/_app/templates'; path: '/templates'; fullPath: '/templates'; preLoaderRoute: typeof AppTemplatesRouteImport; parentRoute: typeof AppRoute }
+    '/_app/whatsapp': { id: '/_app/whatsapp'; path: '/whatsapp'; fullPath: '/whatsapp'; preLoaderRoute: typeof AppWhatsappRouteImport; parentRoute: typeof AppRoute }
+    '/_app/leads/': { id: '/_app/leads/'; path: '/leads'; fullPath: '/leads/'; preLoaderRoute: typeof AppLeadsIndexRouteImport; parentRoute: typeof AppRoute }
+    '/_app/leads/$leadId': { id: '/_app/leads/$leadId'; path: '/leads/$leadId'; fullPath: '/leads/$leadId'; preLoaderRoute: typeof AppLeadsLeadIdRouteImport; parentRoute: typeof AppRoute }
   }
 }
 
@@ -289,33 +168,34 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppTemplatesRoute: typeof AppTemplatesRoute
+  AppWhatsappRoute: typeof AppWhatsappRoute
   AppLeadsLeadIdRoute: typeof AppLeadsLeadIdRoute
   AppLeadsIndexRoute: typeof AppLeadsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAnalyticsRoute: AppAnalyticsRoute,
-  AppAutomationsRoute: AppAutomationsRoute,
-  AppCampaignsRoute: AppCampaignsRoute,
-  AppDashboardRoute: AppDashboardRoute,
-  AppInboxRoute: AppInboxRoute,
-  AppPermissionsRoute: AppPermissionsRoute,
-  AppSettingsRoute: AppSettingsRoute,
-  AppTeamRoute: AppTeamRoute,
-  AppTemplatesRoute: AppTemplatesRoute,
-  AppLeadsLeadIdRoute: AppLeadsLeadIdRoute,
-  AppLeadsIndexRoute: AppLeadsIndexRoute,
+  AppAnalyticsRoute,
+  AppAutomationsRoute,
+  AppCampaignsRoute,
+  AppDashboardRoute,
+  AppInboxRoute,
+  AppPermissionsRoute,
+  AppSettingsRoute,
+  AppTeamRoute,
+  AppTemplatesRoute,
+  AppWhatsappRoute,
+  AppLeadsLeadIdRoute,
+  AppLeadsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+const rootRouteChildren = {
+  IndexRoute,
   AppRoute: AppRouteWithChildren,
 }
-export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+
+export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'
