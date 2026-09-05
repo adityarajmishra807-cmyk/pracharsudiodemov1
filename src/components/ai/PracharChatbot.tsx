@@ -1,6 +1,6 @@
 import { useServerFn } from "@tanstack/react-start";
-import { Bot, ChevronRight, Loader2, MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bot, ChevronRight, Loader2, MessageCircle, RotateCcw, Send, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { buildPracharContext } from "@/lib/ai/context";
 import { chatWithGeminiServer } from "@/lib/ai/chat.server";
@@ -22,6 +22,18 @@ const starterPrompts = [
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function renderAssistantText(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={`${index}-${part}`}>{part.slice(2, -2)}</strong>;
+    }
+
+    return <span key={`${index}-${part}`}>{part}</span>;
+  });
 }
 
 export function PracharChatbot() {
@@ -150,7 +162,9 @@ export function PracharChatbot() {
                         : "rounded-bl-md border border-border bg-card text-foreground"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                    <p className="whitespace-pre-wrap break-words">
+                      {message.role === "model" ? renderAssistantText(message.content) : message.content}
+                    </p>
                   </div>
                 </div>
               ))}
