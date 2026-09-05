@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import pino from "pino";
 import QRCode from "qrcode";
-import makeWASocket, { DisconnectReason, fetchLatestWaWebVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
+import makeWASocket, { Browsers, DisconnectReason, fetchLatestWaWebVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -53,16 +53,27 @@ async function getWaWebVersion() {
     return cachedWaWebVersion;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
   try {
-    const result = await fetchLatestWaWebVersion();
+    const result = await fetchLatestWaWebVersion({ signal: controller.signal });
     if (result?.version) {
       cachedWaWebVersion = result.version;
       cachedWaWebVersionAt = now;
-      logger.info({ version: result.version.join("."), isLatest: result.isLatest }, "Using current WhatsApp Web version");
+      logger.info(
+        { version: result.version.join("."), isLatest: result.isLatest },
+        "Using current WhatsApp Web version",
+      );
       return cachedWaWebVersion;
     }
   } catch (error) {
-    logger.warn({ error: error instanceof Error ? error.message : String(error) }, "Could not fetch current WhatsApp Web version; using Baileys default");
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      "Could not fetch current WhatsApp Web version; using Baileys default",
+    );
+  } finally {
+    clearTimeout(timeout);
   }
 
   return null;
@@ -86,87 +97,109 @@ async function ensureSession(id, autoStart = false) {
     };
     sessions.set(sessionId, session);
   }
+
   if (autoStart && session.status !== "READY" && !session.connecting) {
     await connectSession(session);
   }
+
   return session;
 }
 
 async function connectSession(session) {
   if (session.connecting) return;
+
   session.connecting = true;
   session.error = null;
   session.status = "WAITING_FOR_LINK";
 
-  const authPath = path.join(SESSION_DIR, session.id);
-  await fs.mkdir(authPath, { recursive: true });
-  const { state, saveCreds } = await useMultiFileAuthState(authPath);
-  const version = await getWaWebVersion();
+  try {
+    const authPath = path.join(SESSION_DIR, session.id);
+    await fs.mkdir(authPath, { recursive: true });
+    const { state, saveCreds } = await useMultiFileAuthState(authPath);
+    const version = await getWaWebVersion();
 
-  const socket = makeWASocket({
-    auth: state,
-    ...(version ? { version } : {}),
-    logger: pino({ level: process.env.BAILEYS_LOG_LEVEL || "info" }),
-    printQRInTerminal: false,
-    syncFullHistory: false,
-    markOnlineOnConnect: false,
-    qrTimeout: 60000,
-  });
+    const socket = makeWASocket({
+      auth: state,
+      ...(version ? { version } : {}),
+      browser: Browsers.ubuntu("Chrome"),
+      logger: pino({ level: process.env.BAILEYS_LOG_LEVEL || "warn" }),
+      printQRInTerminal: false,
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      qrTimeout: 60_000,
+      connectTimeoutMs: 60_000,
+    });
 
-  session.socket = socket;
-  socket.ev.on("creds.update", saveCreds);
-  socket.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      session.status = "WAITING_FOR_LINK";
-      try {
-        session.qr = await QRCode.toDataURL(qr, { margin: 1, width: 320, errorCorrectionLevel: "M" });
-        session.error = null;
-      } catch (error) {
-        session.status = "ERROR";
-        session.error = error instanceof Error ? error.message : "QR generation failed";
-        logger.error({ sessionId: session.id, error }, "Failed to encode WhatsApp QR");
-      }
-    }
+    session.socket = socket;
+    socket.ev.on("creds.update", saveCreds);
 
-    if (connection === "open") {
-      session.connecting = false;
-      session.status = "READY";
-      session.qr = null;
-      session.lastConnectedAt = new Date().toISOString();
-      session.error = null;
-      session.phoneNumber = socket.user?.id?.split(":")[0] || null;
-      logger.info({ sessionId: session.id }, "WhatsApp session ready");
-    }
-
-    if (connection === "close") {
-      session.connecting = false;
-      session.socket = null;
-      session.lastDisconnectedAt = new Date().toISOString();
-      const code = lastDisconnect?.error?.output?.statusCode;
-      const message = lastDisconnect?.error?.message || "WhatsApp connection closed";
-      const loggedOut = code === DisconnectReason.loggedOut;
-      session.qr = null;
-      session.error = `${message}${code ? ` (code ${code})` : ""}`;
-      logger.warn({ sessionId: session.id, code, message }, "WhatsApp session closed");
-
-      if (loggedOut) {
-        session.status = "NEEDS_RELINK";
-        session.error = "WhatsApp logged out this linked device. Scan a new QR to relink.";
-        return;
-      }
-
-      session.status = "RECONNECTING";
-      clearTimeout(session.reconnectTimer);
-      session.reconnectTimer = setTimeout(() => {
-        connectSession(session).catch((error) => {
+    socket.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+      if (qr) {
+        session.status = "WAITING_FOR_LINK";
+        try {
+          session.qr = await QRCode.toDataURL(qr, {
+            margin: 1,
+            width: 320,
+            errorCorrectionLevel: "M",
+          });
+          session.error = null;
+          logger.info({ sessionId: session.id }, "WhatsApp QR generated");
+        } catch (error) {
           session.status = "ERROR";
-          session.error = error instanceof Error ? error.message : "Reconnect failed";
-        });
-      }, 2000);
-    }
-  });
+          session.error = error instanceof Error ? error.message : "QR generation failed";
+          logger.error({ sessionId: session.id, error }, "Failed to encode WhatsApp QR");
+        }
+      }
+
+      if (connection === "open") {
+        session.connecting = false;
+        session.status = "READY";
+        session.qr = null;
+        session.lastConnectedAt = new Date().toISOString();
+        session.error = null;
+        session.phoneNumber = socket.user?.id?.split(":")[0] || null;
+        logger.info({ sessionId: session.id }, "WhatsApp session ready");
+      }
+
+      if (connection === "close") {
+        session.connecting = false;
+        session.socket = null;
+        session.lastDisconnectedAt = new Date().toISOString();
+        const code = lastDisconnect?.error?.output?.statusCode;
+        const message = lastDisconnect?.error?.message || "WhatsApp connection closed";
+        const loggedOut = code === DisconnectReason.loggedOut;
+        session.qr = null;
+        session.error = `${message}${code ? ` (code ${code})` : ""}`;
+        logger.warn({ sessionId: session.id, code, message }, "WhatsApp session closed");
+
+        if (loggedOut) {
+          session.status = "NEEDS_RELINK";
+          session.error = "WhatsApp logged out this linked device. Scan a new QR to relink.";
+          return;
+        }
+
+        session.status = "RECONNECTING";
+        clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = setTimeout(() => {
+          connectSession(session).catch((error) => {
+            session.status = "ERROR";
+            session.error = error instanceof Error ? error.message : "Reconnect failed";
+            logger.error({ sessionId: session.id, error }, "Reconnect failed");
+          });
+        }, 2_000);
+      }
+    });
+  } catch (error) {
+    session.connecting = false;
+    session.socket = null;
+    session.status = "ERROR";
+    session.error = error instanceof Error ? error.message : "Unable to start WhatsApp session";
+    logger.error({ sessionId: session.id, error }, "Failed to start WhatsApp session");
+    throw error;
+  }
 }
 
+app.get("/", (_req, res) => res.json({ ok: true, service: "prachar-whatsapp-gateway" }));
 app.get("/health", (_req, res) => res.json({ ok: true, service: "prachar-whatsapp-gateway" }));
 
 app.post("/api/sessions", async (req, res) => {
@@ -175,7 +208,9 @@ app.post("/api/sessions", async (req, res) => {
     const session = await ensureSession(id, true);
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create session" });
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Unable to create session",
+    });
   }
 });
 
@@ -184,7 +219,9 @@ app.get("/api/sessions/:id", async (req, res) => {
     const session = await ensureSession(req.params.id, false);
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to read session" });
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Unable to read session",
+    });
   }
 });
 
@@ -194,7 +231,9 @@ app.post("/api/sessions/:id/reconnect", async (req, res) => {
     await connectSession(session);
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to reconnect" });
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Unable to reconnect",
+    });
   }
 });
 
@@ -212,22 +251,30 @@ app.delete("/api/sessions/:id", async (req, res) => {
     await fs.rm(path.join(SESSION_DIR, session.id), { recursive: true, force: true });
     return res.json({ ok: true });
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to remove session" });
-  }
-});
-
-async function restoreSessions() {
-  await fs.mkdir(SESSION_DIR, { recursive: true });
-  const entries = await fs.readdir(SESSION_DIR, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    try {
-      await ensureSession(entry.name, true);
-    } catch (error) {
-      logger.error({ sessionId: entry.name, error }, "Failed to restore WhatsApp session");
-    }
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Unable to remove session",
+    });
   }
 }
 
-await restoreSessions();
-app.listen(PORT, HOST, () => logger.info({ host: HOST, port: PORT }, "Prachar WhatsApp gateway listening"));
+async function restoreSessions() {
+  try {
+    await fs.mkdir(SESSION_DIR, { recursive: true });
+    const entries = await fs.readdir(SESSION_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        await ensureSession(entry.name, true);
+      } catch (error) {
+        logger.error({ sessionId: entry.name, error }, "Failed to restore WhatsApp session");
+      }
+    }
+  } catch (error) {
+    logger.error({ error }, "Failed to inspect WhatsApp session directory");
+  }
+}
+
+app.listen(PORT, HOST, () => {
+  logger.info({ host: HOST, port: PORT }, "Prachar WhatsApp gateway listening");
+  void restoreSessions();
+});
