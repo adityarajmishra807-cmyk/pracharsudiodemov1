@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import pino from "pino";
 import QRCode from "qrcode";
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from "@whiskeysockets/baileys";
+import makeWASocket, { DisconnectReason, fetchLatestWaWebVersion, useMultiFileAuthState } from "@whiskeysockets/baileys";
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -13,6 +13,8 @@ const API_SECRET = process.env.WHATSAPP_GATEWAY_SECRET || "";
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const sessions = new Map();
+let cachedWaWebVersion = null;
+let cachedWaWebVersionAt = 0;
 
 const app = express();
 app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map((v) => v.trim()) }));
@@ -43,6 +45,27 @@ function publicSession(session) {
     lastDisconnectedAt: session.lastDisconnectedAt,
     error: session.error,
   };
+}
+
+async function getWaWebVersion() {
+  const now = Date.now();
+  if (cachedWaWebVersion && now - cachedWaWebVersionAt < 6 * 60 * 60 * 1000) {
+    return cachedWaWebVersion;
+  }
+
+  try {
+    const result = await fetchLatestWaWebVersion();
+    if (result?.version) {
+      cachedWaWebVersion = result.version;
+      cachedWaWebVersionAt = now;
+      logger.info({ version: result.version.join("."), isLatest: result.isLatest }, "Using current WhatsApp Web version");
+      return cachedWaWebVersion;
+    }
+  } catch (error) {
+    logger.warn({ error: error instanceof Error ? error.message : String(error) }, "Could not fetch current WhatsApp Web version; using Baileys default");
+  }
+
+  return null;
 }
 
 async function ensureSession(id, autoStart = false) {
@@ -78,13 +101,16 @@ async function connectSession(session) {
   const authPath = path.join(SESSION_DIR, session.id);
   await fs.mkdir(authPath, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
+  const version = await getWaWebVersion();
 
   const socket = makeWASocket({
     auth: state,
-    logger: pino({ level: "silent" }),
+    ...(version ? { version } : {}),
+    logger: pino({ level: process.env.BAILEYS_LOG_LEVEL || "info" }),
     printQRInTerminal: false,
     syncFullHistory: false,
     markOnlineOnConnect: false,
+    qrTimeout: 60000,
   });
 
   session.socket = socket;
@@ -92,8 +118,14 @@ async function connectSession(session) {
   socket.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       session.status = "WAITING_FOR_LINK";
-      session.qr = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
-      session.error = null;
+      try {
+        session.qr = await QRCode.toDataURL(qr, { margin: 1, width: 320, errorCorrectionLevel: "M" });
+        session.error = null;
+      } catch (error) {
+        session.status = "ERROR";
+        session.error = error instanceof Error ? error.message : "QR generation failed";
+        logger.error({ sessionId: session.id, error }, "Failed to encode WhatsApp QR");
+      }
     }
 
     if (connection === "open") {
@@ -111,8 +143,11 @@ async function connectSession(session) {
       session.socket = null;
       session.lastDisconnectedAt = new Date().toISOString();
       const code = lastDisconnect?.error?.output?.statusCode;
+      const message = lastDisconnect?.error?.message || "WhatsApp connection closed";
       const loggedOut = code === DisconnectReason.loggedOut;
       session.qr = null;
+      session.error = `${message}${code ? ` (code ${code})` : ""}`;
+      logger.warn({ sessionId: session.id, code, message }, "WhatsApp session closed");
 
       if (loggedOut) {
         session.status = "NEEDS_RELINK";
