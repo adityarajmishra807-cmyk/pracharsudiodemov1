@@ -15,6 +15,11 @@ type GatewayResponse = {
   error: string | null;
 };
 
+type GatewayHealth = {
+  ok: boolean;
+  service: string;
+};
+
 async function gatewayFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const root = baseUrl();
   if (!root) {
@@ -23,26 +28,41 @@ async function gatewayFetch<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  const response = await fetch(`${root}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(secret() ? { authorization: `Bearer ${secret()}` } : {}),
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${root}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(secret() ? { authorization: `Bearer ${secret()}` } : {}),
+        ...(init?.headers || {}),
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    throw new Error(
+      `Could not reach WhatsApp gateway at ${root}. ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 
   const data = (await response.json().catch(() => null)) as
     | (T & { error?: string })
     | null;
 
   if (!response.ok) {
-    throw new Error(data?.error || `WhatsApp gateway returned ${response.status}`);
+    const detail = data?.error ? `: ${data.error}` : "";
+    throw new Error(`WhatsApp gateway HTTP ${response.status}${detail}`);
   }
 
   return data as T;
 }
+
+export const checkWhatsAppGateway = createServerFn({ method: "POST" }).handler(() =>
+  gatewayFetch<GatewayHealth>("/health"),
+);
 
 export const startWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => SessionSchema.parse(value))
