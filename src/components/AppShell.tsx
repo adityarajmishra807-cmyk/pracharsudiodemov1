@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { PracharChatbot } from "@/components/ai/PracharChatbot";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -233,6 +234,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         ) : null}
       </nav>
+
+      <PracharChatbot />
     </div>
   );
 }

@@ -172,7 +172,7 @@ export type Session =
   | { kind: "member"; memberId: string }
   | null;
 
-type State = {
+export type State = {
   members: Member[];
   leads: Lead[];
   conversations: Conversation[];
@@ -207,45 +207,35 @@ const STORAGE_KEY = "prachar-studio-demo-v1";
 export const uid = () => Math.random().toString(36).slice(2, 10);
 const now = () => new Date().toISOString();
 
-/* --------------------------------- context -------------------------------- */
-
 type Store = {
   ready: boolean;
   state: State;
-  // session
   signIn: (session: Exclude<Session, null>) => void;
   signOut: () => void;
   isOwner: boolean;
   currentMember: Member | null;
   can: (key: PermissionKey) => boolean;
-  // members
   addMember: (data: Omit<Member, "id" | "createdAt">) => Member;
   updateMember: (id: string, data: Partial<Member>) => void;
   removeMember: (id: string) => void;
   setMemberPermissions: (id: string, permissions: Permissions) => void;
-  // leads
   addLead: (
     data: Omit<Lead, "id" | "createdAt" | "activity"> & { activity?: Activity[] },
   ) => Lead;
   updateLead: (id: string, data: Partial<Lead>, activityText?: string) => void;
   removeLead: (id: string) => void;
-  // conversations
   startConversation: (leadId: string) => Conversation;
   addMessage: (conversationId: string, direction: "in" | "out", text: string) => void;
   updateConversation: (id: string, data: Partial<Conversation>) => void;
-  // templates
   addTemplate: (data: Omit<Template, "id" | "createdAt">) => Template;
   updateTemplate: (id: string, data: Partial<Template>) => void;
   removeTemplate: (id: string) => void;
-  // campaigns
   addCampaign: (data: Omit<Campaign, "id" | "createdAt">) => Campaign;
   updateCampaign: (id: string, data: Partial<Campaign>) => void;
   removeCampaign: (id: string) => void;
-  // automations
   addAutomation: (name: string) => Automation;
   updateAutomation: (id: string, data: Partial<Automation>) => void;
   removeAutomation: (id: string) => void;
-  // settings
   updateSettings: (data: Partial<Settings>) => void;
   resetDemo: () => void;
   memberName: (id: string | null) => string;
