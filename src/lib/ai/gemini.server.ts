@@ -1,3 +1,4 @@
+import { PRACHAR_AI_PRODUCT_KNOWLEDGE } from "./knowledge";
 import { PRACHAR_AI_SYSTEM_PROMPT } from "./prompt";
 import type { ChatRequest, ChatResponse } from "./types";
 
@@ -37,6 +38,8 @@ function buildContents(input: ChatRequest) {
 
 export async function chatWithGemini(input: ChatRequest): Promise<ChatResponse> {
   const { apiKey, model } = getConfig();
+  const systemInstruction = `${PRACHAR_AI_SYSTEM_PROMPT}\n\n${PRACHAR_AI_PRODUCT_KNOWLEDGE}`;
+
   const response = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: {
@@ -45,7 +48,7 @@ export async function chatWithGemini(input: ChatRequest): Promise<ChatResponse> 
     },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: PRACHAR_AI_SYSTEM_PROMPT }],
+        parts: [{ text: systemInstruction }],
       },
       contents: buildContents(input),
       generationConfig: {
