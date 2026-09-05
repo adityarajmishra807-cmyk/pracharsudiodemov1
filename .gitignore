@@ -19,6 +19,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# WhatsApp gateway session credentials
+whatsapp-gateway/data/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
