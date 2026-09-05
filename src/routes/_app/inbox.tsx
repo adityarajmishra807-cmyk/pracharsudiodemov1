@@ -1,369 +1,144 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, FileText, Lock, MessageSquare, Send } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowLeft, CheckCheck, MessageSquare, RefreshCw, Send, Smartphone } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { formatTime, useStore, type Conversation } from "@/lib/store";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listWhatsAppChats, markWhatsAppChatRead, sendWhatsAppMessage, type GatewayChat } from "@/lib/whatsapp/inbox.server";
 
+type WhatsAppAccount = { id: string; displayName: string; phoneNumber: string; status: string };
+const ACCOUNT_KEY = "prachar-whatsapp-accounts-v2";
 const searchSchema = z.object({ c: z.string().optional() });
 
 export const Route = createFileRoute("/_app/inbox")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "WhatsApp inbox — Prachar Studio CRM" },
-      {
-        name: "description",
-        content:
-          "Two-pane WhatsApp-style inbox: reply to leads, insert approved templates and assign conversations to your team.",
-      },
-      { property: "og:title", content: "WhatsApp inbox — Prachar Studio CRM" },
-      {
-        property: "og:description",
-        content: "Reply, assign and manage WhatsApp conversations with your leads.",
-      },
+      { title: "WhatsApp Inbox — Prachar Studio" },
+      { name: "description", content: "Receive and send WhatsApp messages from connected accounts." },
     ],
   }),
   component: InboxPage,
 });
 
 function InboxPage() {
-  const {
-    state,
-    can,
-    addMessage,
-    updateConversation,
-    memberName,
-    startConversation,
-  } = useStore();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+  const [accountId, setAccountId] = useState("");
+  const [chats, setChats] = useState<GatewayChat[]>([]);
+  const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const canReply = can("inboxReply");
-  const canAssign = can("inboxAssign");
-  const conversations = state.conversations;
-  const active: Conversation | null =
-    conversations.find((c) => c.id === search.c) ?? null;
+  const activeChat = useMemo(() => chats.find((chat) => chat.id === search.c) ?? chats[0] ?? null, [chats, search.c]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [active?.messages.length, active?.id]);
+    try {
+      const raw = localStorage.getItem(ACCOUNT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as WhatsAppAccount[];
+      const ready = parsed.filter((account) => account.status === "READY");
+      setAccounts(ready);
+      if (ready[0]) setAccountId(ready[0].id);
+    } catch {
+      setAccounts([]);
+    }
+  }, []);
 
-  const leadOf = (convo: Conversation) =>
-    state.leads.find((l) => l.id === convo.leadId) ?? null;
-
-  if (!canReply && !canAssign) {
-    return (
-      <div className="space-y-5">
-        <PageHeader title="WhatsApp inbox" />
-        <EmptyState
-          icon={Lock}
-          title="No inbox access"
-          description="Ask the workspace owner to enable inbox replies or assignment for your account."
-        />
-      </div>
-    );
-  }
-
-  if (state.leads.length === 0) {
-    return (
-      <div className="space-y-5">
-        <PageHeader
-          title="WhatsApp inbox"
-          description="Conversations are created from your leads."
-        />
-        <EmptyState
-          icon={MessageSquare}
-          title="No conversations yet"
-          description="Add a lead first, then start a chat from the lead profile. Real conversations only — nothing is pre-filled."
-          action={
-            <Button asChild>
-              <Link to="/leads">Go to leads</Link>
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-
-  const send = () => {
-    if (!active || !draft.trim()) return;
-    addMessage(active.id, "out", draft.trim());
-    setDraft("");
+  const loadChats = async () => {
+    if (!accountId) {
+      setChats([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listWhatsAppChats({ data: { accountId } });
+      setChats(result.chats);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load WhatsApp chats");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const templates = state.templates.filter((t) => t.status !== "paused");
+  useEffect(() => {
+    void loadChats();
+    const timer = window.setInterval(() => void loadChats(), 3000);
+    return () => window.clearInterval(timer);
+  }, [accountId]);
+
+  useEffect(() => {
+    if (!activeChat) return;
+    void markWhatsAppChatRead({ data: { id: activeChat.id } });
+    setChats((current) => current.map((chat) => chat.id === activeChat.id ? { ...chat, unread: 0 } : chat));
+  }, [activeChat?.id]);
+
+  const send = async () => {
+    if (!activeChat || !draft.trim() || sending) return;
+    setSending(true);
+    const text = draft.trim();
+    try {
+      const result = await sendWhatsAppMessage({ data: { id: activeChat.id, text } });
+      setChats((current) => current.map((chat) => chat.id === activeChat.id ? result.chat : chat));
+      setDraft("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send WhatsApp message");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (accounts.length === 0) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="WhatsApp Inbox" description="Receive and send messages from connected WhatsApp accounts." />
+        <EmptyState icon={Smartphone} title="No connected WhatsApp accounts" description="Connect a WhatsApp account in WhatsApp Manager, then return here to use the live inbox." />
+      </div>
+    );
+  }
+
+  const selectedAccount = accounts.find((account) => account.id === accountId);
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="WhatsApp inbox"
-        description="Replies are stored locally so you can demo real conversations."
+        title="WhatsApp Inbox"
+        description="Live conversations from your connected WhatsApp account."
+        actions={
+          <div className="flex items-center gap-2">
+            <Select value={accountId} onValueChange={(value) => { setAccountId(value); void navigate({ search: {} }); }}>
+              <SelectTrigger className="w-56" aria-label="WhatsApp account"><SelectValue placeholder="Select account" /></SelectTrigger>
+              <SelectContent>
+                {accounts.map((account) => <SelectItem key={account.id} value={account.id}>{account.displayName}{account.phoneNumber ? ` · ${account.phoneNumber}` : ""}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" onClick={() => void loadChats()} disabled={loading} aria-label="Refresh chats"><RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /></Button>
+          </div>
+        }
       />
 
-      <div className="grid overflow-hidden rounded-lg border border-border bg-card lg:h-[calc(100svh-13rem)] lg:grid-cols-[320px_1fr]">
-        {/* List */}
-        <aside
-          className={`border-border lg:border-r ${active ? "hidden lg:block" : "block"} lg:overflow-y-auto`}
-        >
-          {conversations.length === 0 ? (
-            <div className="p-4">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                No chats started. Pick a lead below to open its first conversation.
-              </p>
-              <ul className="mt-3 space-y-2">
-                {state.leads.map((lead) => (
-                  <li key={lead.id}>
-                    <button
-                      type="button"
-                      className="min-h-11 w-full rounded-md border border-border px-3 py-2 text-left text-sm transition-colors hover:border-primary/40"
-                      onClick={() => {
-                        const convo = startConversation(lead.id);
-                        void navigate({ search: { c: convo.id } });
-                      }}
-                    >
-                      <span className="block truncate font-medium">{lead.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {lead.phone || "No number saved"}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {conversations.map((convo) => {
-                const lead = leadOf(convo);
-                const last = convo.messages[convo.messages.length - 1];
-                return (
-                  <li key={convo.id}>
-                    <button
-                      type="button"
-                      onClick={() => void navigate({ search: { c: convo.id } })}
-                      className={`w-full px-4 py-3 text-left transition-colors ${
-                        active?.id === convo.id ? "bg-primary/10" : "hover:bg-surface"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-semibold text-navy">
-                          {lead?.name ?? "Unknown lead"}
-                        </span>
-                        <StatusBadge value={convo.status} />
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {last
-                          ? `${last.direction === "out" ? "You: " : ""}${last.text}`
-                          : "No messages yet"}
-                      </p>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+      {error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div> : null}
+
+      <div className="grid overflow-hidden rounded-xl border border-border bg-card lg:h-[calc(100svh-12.5rem)] lg:grid-cols-[340px_1fr]">
+        <aside className={`border-border lg:border-r ${activeChat ? "hidden lg:block" : "block"} overflow-y-auto`}>
+          <div className="border-b border-border px-4 py-3"><p className="text-xs font-medium uppercase text-muted-foreground">Account</p><p className="mt-1 font-semibold text-navy">{selectedAccount?.displayName}</p></div>
+          {loading && chats.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground"><RefreshCw className="mx-auto size-5 animate-spin" /><p className="mt-2">Loading conversations…</p></div> : chats.length === 0 ? <div className="p-8 text-center"><MessageSquare className="mx-auto size-7 text-muted-foreground" /><p className="mt-3 font-medium text-navy">No conversations yet</p><p className="mt-1 text-sm text-muted-foreground">Send a WhatsApp message to this account and incoming chats will appear here.</p></div> : <ul className="divide-y divide-border">{chats.map((chat) => <li key={chat.id}><button type="button" className={`w-full px-4 py-3 text-left hover:bg-surface ${activeChat?.id === chat.id ? "bg-primary/10" : ""}`} onClick={() => void navigate({ search: { c: chat.id } })}><div className="flex items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white">{chat.name.slice(0, 1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate font-semibold text-navy">{chat.name}</span>{chat.unread > 0 ? <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-white">{chat.unread}</span> : null}</div><p className="mt-0.5 truncate text-xs text-muted-foreground">{chat.lastMessage}</p></div></div></button></li>)}</ul>}
         </aside>
 
-        {/* Thread */}
-        <section className={`flex min-h-[60svh] flex-col ${active ? "flex" : "hidden lg:flex"}`}>
-          {!active ? (
-            <div className="flex flex-1 items-center justify-center p-8 text-center">
-              <p className="max-w-xs text-sm text-muted-foreground">
-                Select a conversation to see the thread.
-              </p>
-            </div>
-          ) : (
-            <>
-              <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden"
-                  aria-label="Back to conversations"
-                  onClick={() => void navigate({ search: {} })}
-                >
-                  <ArrowLeft className="size-4" />
-                </Button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-navy">
-                    {leadOf(active)?.name ?? "Unknown lead"}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {memberName(active.assignedTo)} · {active.status}
-                  </p>
-                </div>
-                {canAssign ? (
-                  <Select
-                    value={active.assignedTo ?? "unassigned"}
-                    onValueChange={(v) =>
-                      updateConversation(active.id, {
-                        assignedTo: v === "unassigned" ? null : v,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-9 w-36" aria-label="Assign conversation">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      <SelectItem value="owner">Owner</SelectItem>
-                      {state.members.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                {canAssign ? (
-                  <Select
-                    value={active.status}
-                    onValueChange={(v) =>
-                      updateConversation(active.id, {
-                        status: v as Conversation["status"],
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-9 w-28" aria-label="Conversation status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : null}
-              </header>
-
-              <div className="flex-1 space-y-2 overflow-y-auto bg-surface p-3">
-                {active.messages.length === 0 ? (
-                  <p className="mx-auto max-w-xs pt-10 text-center text-sm text-muted-foreground">
-                    No messages in this chat yet. Send the first one below.
-                  </p>
-                ) : (
-                  active.messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[78%] rounded-lg px-3 py-2 text-sm break-words ${
-                          m.direction === "out"
-                            ? "bg-navy text-white"
-                            : "border border-border bg-card text-foreground"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{m.text}</p>
-                        <p
-                          className={`mt-1 text-[11px] ${m.direction === "out" ? "text-white/60" : "text-muted-foreground"}`}
-                        >
-                          {formatTime(m.at)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-                <div ref={endRef} />
-              </div>
-
-              {canReply ? (
-                <div className="flex items-end gap-2 border-t border-border p-2.5">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" aria-label="Insert template">
-                        <FileText className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-64">
-                      <DropdownMenuLabel>Insert template</DropdownMenuLabel>
-                      {templates.length === 0 ? (
-                        <p className="px-2 py-3 text-xs text-muted-foreground">
-                          No templates created yet.
-                        </p>
-                      ) : (
-                        templates.map((t) => (
-                          <DropdownMenuItem
-                            key={t.id}
-                            onSelect={() => {
-                              const lead = leadOf(active);
-                              setDraft(
-                                t.body.replace(/\{\{name\}\}/g, lead?.name ?? "there"),
-                              );
-                            }}
-                          >
-                            <span className="truncate">{t.name}</span>
-                          </DropdownMenuItem>
-                        ))
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Input
-                    className="h-11"
-                    placeholder="Type a message"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        send();
-                      }
-                    }}
-                    aria-label="Message"
-                  />
-                  <Button
-                    size="icon"
-                    className="size-11 shrink-0"
-                    onClick={send}
-                    aria-label="Send message"
-                  >
-                    <Send className="size-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="hidden h-11 sm:inline-flex"
-                    onClick={() => {
-                      if (!draft.trim()) {
-                        toast.error("Type the customer reply first");
-                        return;
-                      }
-                      addMessage(active.id, "in", draft.trim());
-                      setDraft("");
-                    }}
-                  >
-                    Log incoming
-                  </Button>
-                </div>
-              ) : (
-                <p className="border-t border-border p-3 text-center text-xs text-muted-foreground">
-                  You can view and assign this chat, but replying is disabled for your
-                  account.
-                </p>
-              )}
-            </>
-          )}
+        <section className={`flex min-h-[65svh] flex-col ${activeChat ? "flex" : "hidden lg:flex"}`}>
+          {!activeChat ? <div className="flex flex-1 items-center justify-center p-8 text-center"><div><MessageSquare className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 font-medium text-navy">Select a conversation</p></div></div> : <>
+            <header className="flex items-center gap-3 border-b border-border px-4 py-3"><Button variant="ghost" size="icon" className="lg:hidden" onClick={() => void navigate({ search: {} })} aria-label="Back to conversations"><ArrowLeft className="size-4" /></Button><div className="flex size-10 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white">{activeChat.name.slice(0, 1).toUpperCase()}</div><div className="min-w-0"><p className="truncate font-semibold text-navy">{activeChat.name}</p><p className="text-xs text-muted-foreground">{activeChat.phoneNumber}</p></div></header>
+            <div className="flex-1 overflow-y-auto bg-surface p-4 space-y-2">{activeChat.messages.map((message) => <div key={message.id} className={`flex ${message.direction === "out" ? "justify-end" : "justify-start"}`}><div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${message.direction === "out" ? "rounded-br-md bg-navy text-white" : "rounded-bl-md border border-border bg-card text-foreground"}`}><p className="whitespace-pre-wrap break-words">{message.text}</p><div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-60"><span>{new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>{message.direction === "out" ? <CheckCheck className="size-3" /> : null}</div></div></div>)}</div>
+            <div className="flex items-center gap-2 border-t border-border p-3"><Input className="h-11" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Type a WhatsApp message…" disabled={sending} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button className="h-11 px-4" onClick={() => void send()} disabled={!draft.trim() || sending}><Send className="mr-2 size-4" />{sending ? "Sending…" : "Send"}</Button></div>
+          </>}
         </section>
       </div>
     </div>
