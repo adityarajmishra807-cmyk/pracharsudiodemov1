@@ -4,5 +4,5 @@ import { chatWithGemini } from "./gemini.server";
 import { ChatRequestSchema } from "./types";
 
 export const chatWithGeminiServer = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => ChatRequestSchema.parse(input))
+  .validator(ChatRequestSchema)
   .handler(async ({ data }) => chatWithGemini(data));
