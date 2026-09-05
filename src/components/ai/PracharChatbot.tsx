@@ -115,7 +115,7 @@ export function PracharChatbot() {
         type="button"
         aria-label="Open Prachar AI"
         onClick={() => setOpen(true)}
-        className="fixed right-5 bottom-5 z-40 flex size-14 items-center justify-center rounded-full bg-navy text-white shadow-lg ring-1 ring-black/10 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:right-7 lg:bottom-7"
+        className="fixed right-4 bottom-20 z-40 flex size-14 items-center justify-center rounded-full bg-navy text-white shadow-lg ring-1 ring-black/10 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:right-5 lg:right-7 lg:bottom-7"
       >
         <MessageCircle className="size-6" aria-hidden="true" />
         <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
