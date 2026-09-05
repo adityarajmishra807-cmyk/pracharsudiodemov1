@@ -236,9 +236,8 @@ export function PracharChatbot() {
                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               </Button>
             </div>
-            <div className="mt-1.5 flex items-center justify-between px-1 text-[10px] text-muted-foreground">
+            <div className="mt-1.5 flex items-center justify-end px-1 text-[10px] text-muted-foreground">
               <span>Enter to send · Shift+Enter for a new line</span>
-              <span>Gemini</span>
             </div>
           </div>
         </SheetContent>
