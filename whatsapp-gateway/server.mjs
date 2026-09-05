@@ -99,7 +99,11 @@ async function ensureSession(id, autoStart = false) {
   }
 
   if (autoStart && session.status !== "READY" && !session.connecting) {
-    await connectSession(session);
+    // Start asynchronously so health/API requests never wait for WhatsApp Web.
+    void connectSession(session).catch((error) => {
+      session.status = "ERROR";
+      session.error = error instanceof Error ? error.message : "Unable to start WhatsApp session";
+    });
   }
 
   return session;
@@ -208,9 +212,7 @@ app.post("/api/sessions", async (req, res) => {
     const session = await ensureSession(id, true);
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : "Unable to create session",
-    });
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create session" });
   }
 });
 
@@ -219,21 +221,20 @@ app.get("/api/sessions/:id", async (req, res) => {
     const session = await ensureSession(req.params.id, false);
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : "Unable to read session",
-    });
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to read session" });
   }
 });
 
 app.post("/api/sessions/:id/reconnect", async (req, res) => {
   try {
     const session = await ensureSession(req.params.id, false);
-    await connectSession(session);
+    void connectSession(session).catch((error) => {
+      session.status = "ERROR";
+      session.error = error instanceof Error ? error.message : "Unable to reconnect";
+    });
     return res.json(publicSession(session));
   } catch (error) {
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : "Unable to reconnect",
-    });
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to reconnect" });
   }
 });
 
@@ -251,11 +252,9 @@ app.delete("/api/sessions/:id", async (req, res) => {
     await fs.rm(path.join(SESSION_DIR, session.id), { recursive: true, force: true });
     return res.json({ ok: true });
   } catch (error) {
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : "Unable to remove session",
-    });
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to remove session" });
   }
-}
+});
 
 async function restoreSessions() {
   try {
