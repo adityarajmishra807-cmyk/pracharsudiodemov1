@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Settings,
   ShieldCheck,
+  Smartphone,
   Users,
   FileText,
   UserRound,
@@ -60,6 +61,11 @@ const NAV: NavItem[] = [
     icon: FileText,
     permission: ["templatesUse", "templatesManage"],
     primaryMobile: true,
+  },
+  {
+    to: "/whatsapp",
+    label: "WhatsApp Manager",
+    icon: Smartphone,
   },
   { to: "/campaigns", label: "Campaigns", icon: Megaphone, permission: "campaigns" },
   { to: "/automations", label: "Automations", icon: Bot, permission: "automations" },
@@ -145,7 +151,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-surface">
-      {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-navy px-3 py-4 lg:flex">
         <div className="px-2 pb-4">
           <Logo onDark />
@@ -157,17 +162,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="lg:pl-64">
-        {/* Header */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-border bg-white px-4 lg:h-16 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
               <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden"
-                  aria-label="Open navigation"
-                >
+                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
                   <MoreHorizontal className="size-5" />
                 </Button>
               </SheetTrigger>
@@ -187,9 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground lg:flex">
               <Building2 className="size-4" aria-hidden="true" />
-              <span className="truncate font-medium text-foreground">
-                {state.settings.workspaceName}
-              </span>
+              <span className="truncate font-medium text-foreground">{state.settings.workspaceName}</span>
             </div>
           </div>
           <span className="shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-navy">
@@ -197,16 +194,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl px-4 pt-4 pb-24 lg:px-6 lg:pb-10">
-          {children}
-        </main>
+        <main className="mx-auto w-full max-w-7xl px-4 pt-4 pb-24 lg:px-6 lg:pb-10">{children}</main>
       </div>
 
-      {/* Mobile bottom nav */}
-      <nav
-        className="safe-bottom fixed inset-x-0 bottom-0 z-30 flex items-stretch border-t border-border bg-white pt-1.5 lg:hidden"
-        aria-label="Primary"
-      >
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 flex items-stretch border-t border-border bg-white pt-1.5 lg:hidden" aria-label="Primary">
         {primary.map(({ to, label, icon: Icon }) => {
           const active = pathname.startsWith(to);
           return (
