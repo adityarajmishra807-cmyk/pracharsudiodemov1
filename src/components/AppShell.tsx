@@ -111,9 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-border bg-white px-4 lg:h-16 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation"><MoreHorizontal className="size-5" /></Button>
-              </SheetTrigger>
+              <SheetTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation"><MoreHorizontal className="size-5" /></Button></SheetTrigger>
               <SheetContent side="left" className="w-[17rem] border-none bg-navy p-3">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
                 <div className="px-2 pt-1 pb-4"><Logo onDark /></div>
@@ -122,10 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
             <div className="min-w-0 lg:hidden"><Logo className="h-6" /></div>
-            <div className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground lg:flex">
-              <Building2 className="size-4" aria-hidden="true" />
-              <span className="truncate font-medium text-foreground">{state.settings.workspaceName}</span>
-            </div>
+            <div className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground lg:flex"><Building2 className="size-4" aria-hidden="true" /><span className="truncate font-medium text-foreground">{state.settings.workspaceName}</span></div>
           </div>
           <span className="shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-navy">{isOwner ? "Owner" : `Member${currentMember ? ` · ${currentMember.name}` : ""}`}</span>
         </header>
