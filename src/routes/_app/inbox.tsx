@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { WhatsAppAccountSelect } from "@/components/whatsapp/WhatsAppAccountSelect";
 import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
-import { WhatsAppChatThread } from "@/components/whatsapp/WhatsAppChatThread";
+import { WhatsAppChatThreadRich } from "@/components/whatsapp/WhatsAppChatThreadRich";
 import { useWhatsAppChats, useWhatsAppMessages, useWhatsAppSessions } from "@/lib/whatsapp";
 
 const searchSchema = z.object({ account: z.string().optional(), chat: z.string().optional() });
@@ -84,7 +84,7 @@ function InboxPage() {
           <WhatsAppChatList chats={chats} selectedJid={activeJid} loading={chatsLoading} refreshing={chatsRefreshing} onSelect={(jid) => void navigate({ search: { account: accountId, chat: jid } })} />
         </aside>
         <section className={`flex min-h-0 min-w-0 ${activeChat ? "flex" : "hidden lg:flex"}`}>
-          <WhatsAppChatThread
+          <WhatsAppChatThreadRich
             sessionId={activeSession!.sessionId}
             chat={activeChat}
             messages={messages}
