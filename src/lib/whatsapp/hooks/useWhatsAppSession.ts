@@ -12,10 +12,16 @@ export function useWhatsAppSession(sessionId: string | null, options: { pollMs?:
   const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
+  const sessionRef = useRef<WhatsAppSession | null>(null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
       if (mountedRef.current) {
+        sessionRef.current = null;
         setSession(null);
         setLoading(false);
         setRefreshing(false);
@@ -23,17 +29,19 @@ export function useWhatsAppSession(sessionId: string | null, options: { pollMs?:
       }
       return null;
     }
-    if (inFlightRef.current) return session;
+    if (inFlightRef.current) return sessionRef.current;
 
     inFlightRef.current = true;
+    const hasExistingSession = Boolean(sessionRef.current);
     if (mountedRef.current) {
-      if (session) setRefreshing(true);
+      if (hasExistingSession) setRefreshing(true);
       else setLoading(true);
     }
 
     try {
       setError(null);
       const next = await sessionService.status({ data: { sessionId } });
+      sessionRef.current = next;
       if (mountedRef.current) setSession(next);
       return next;
     } catch (value) {
@@ -47,13 +55,14 @@ export function useWhatsAppSession(sessionId: string | null, options: { pollMs?:
         setRefreshing(false);
       }
     }
-  }, [session, sessionId]);
+  }, [sessionId]);
 
   useEffect(() => {
     mountedRef.current = true;
     generationRef.current += 1;
     const generation = generationRef.current;
     inFlightRef.current = false;
+    sessionRef.current = null;
     setSession(null);
     setError(null);
 
@@ -66,26 +75,19 @@ export function useWhatsAppSession(sessionId: string | null, options: { pollMs?:
     void refresh().catch(() => undefined);
 
     let timer: number | undefined;
-    const schedule = () => {
+    const schedule = (delay: number) => {
       timer = window.setTimeout(async () => {
         if (!mountedRef.current || generation !== generationRef.current) return;
         try {
           const next = await refresh();
-          // Once the session is actually ready, status polling can be relaxed substantially.
-          // During QR/connecting states we poll faster so the UI transitions promptly.
-          const nextPollMs = next?.status === "open" ? Math.max(pollMs, 15000) : pollMs;
-          if (mountedRef.current && generation === generationRef.current) {
-            timer = window.setTimeout(schedule, nextPollMs);
-          }
-          return;
+          const nextDelay = next?.status === "open" ? Math.max(pollMs, 15000) : pollMs;
+          if (mountedRef.current && generation === generationRef.current) schedule(nextDelay);
         } catch {
-          if (mountedRef.current && generation === generationRef.current) {
-            timer = window.setTimeout(schedule, Math.max(pollMs * 2, 5000));
-          }
+          if (mountedRef.current && generation === generationRef.current) schedule(Math.max(pollMs * 2, 5000));
         }
-      }, pollMs);
+      }, delay);
     };
-    schedule();
+    schedule(pollMs);
 
     return () => {
       mountedRef.current = false;
