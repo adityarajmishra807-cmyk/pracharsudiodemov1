@@ -88,11 +88,11 @@ function InboxPage() {
 
       {error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive break-words">{error}</div> : null}
 
-      <div className="grid overflow-hidden rounded-xl border border-border bg-card lg:h-[calc(100svh-12.5rem)] lg:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className={`overflow-y-auto border-border lg:border-r ${activeChat ? "hidden lg:block" : "block"}`}>
+      <div className="grid min-h-0 overflow-hidden rounded-xl border border-border bg-card lg:h-[calc(100svh-12.5rem)] lg:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className={`min-h-0 overflow-y-auto border-border lg:border-r ${activeChat ? "hidden lg:block" : "block"}`}>
           <WhatsAppChatList chats={chats} selectedJid={activeJid} loading={chatsLoading} onSelect={(jid) => void navigate({ search: { account: accountId, chat: jid } })} />
         </aside>
-        <section className={`flex ${activeChat ? "flex" : "hidden lg:flex"}`}>
+        <section className={`flex min-h-0 min-w-0 ${activeChat ? "flex" : "hidden lg:flex"}`}>
           <WhatsAppChatThread
             sessionId={activeSession!.sessionId}
             chat={activeChat}
