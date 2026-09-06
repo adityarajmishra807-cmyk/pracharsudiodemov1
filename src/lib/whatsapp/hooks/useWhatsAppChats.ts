@@ -1,92 +1,139 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { chatService } from "../services/chat.service";
+import { realtimeService } from "../services/realtime.service";
 import type { WhatsAppChat } from "../core/types";
 
-export type WhatsAppChatLoadState = "idle" | "loading" | "refreshing" | "ready" | "error";
+export type WhatsAppChatLoadState = "idle" | "loading" | "ready" | "error";
 
-export function useWhatsAppChats(sessionId: string | null, options: { pollMs?: number } = {}) {
-  const pollMs = options.pollMs ?? 7000;
+export function useWhatsAppChats(sessionId: string | null) {
   const [chats, setChats] = useState<WhatsAppChat[]>([]);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const chatsRef = useRef<WhatsAppChat[]>([]);
   const generationRef = useRef(0);
 
+  const apply = useCallback((next: WhatsAppChat[]) => {
+    chatsRef.current = next.sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
+    if (mountedRef.current) setChats([...chatsRef.current]);
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!sessionId) {
-      chatsRef.current = [];
-      if (mountedRef.current) {
-        setChats([]);
-        setLoading(false);
-        setRefreshing(false);
-        setError(null);
-      }
+      apply([]);
       return [];
     }
-    if (inFlightRef.current) return chatsRef.current;
-    inFlightRef.current = true;
-    const initial = chatsRef.current.length === 0;
-    if (mountedRef.current) {
-      if (initial) setLoading(true);
-      setRefreshing(true);
-    }
+    const generation = generationRef.current;
+    setLoading(true);
     try {
-      setError(null);
       const next = await chatService.list({ data: { sessionId } });
-      chatsRef.current = next;
-      if (mountedRef.current) setChats(next);
+      if (generation !== generationRef.current) return next;
+      apply(next);
+      setError(null);
+      setLoading(false);
       return next;
     } catch (value) {
-      const message = value instanceof Error ? value.message : "Could not load WhatsApp chats.";
-      if (mountedRef.current) setError(message);
-      throw value;
-    } finally {
-      inFlightRef.current = false;
-      if (mountedRef.current) {
+      if (generation === generationRef.current) {
+        setError(value instanceof Error ? value.message : "Could not load WhatsApp chats.");
         setLoading(false);
-        setRefreshing(false);
       }
+      throw value;
     }
-  }, [sessionId]);
+  }, [apply, sessionId]);
 
   useEffect(() => {
     mountedRef.current = true;
     generationRef.current += 1;
     const generation = generationRef.current;
-    inFlightRef.current = false;
     chatsRef.current = [];
     setChats([]);
     setError(null);
     if (!sessionId) {
       setLoading(false);
-      setRefreshing(false);
       return;
     }
-    setLoading(true);
+
+    const unsubs = [
+      realtimeService.subscribe("chats.upsert", (payload) => {
+        if (payload.sessionId !== sessionId) return;
+        const incoming = Array.isArray(payload.payload) ? payload.payload as Array<Record<string, unknown>> : [];
+        const map = new Map(chatsRef.current.map((chat) => [chat.jid, chat]));
+        for (const raw of incoming) {
+          const jid = typeof raw.id === "string" ? raw.id : "";
+          if (!jid) continue;
+          const current = map.get(jid);
+          map.set(jid, {
+            sessionId,
+            jid,
+            name: typeof raw.name === "string" ? raw.name : current?.name || "",
+            unreadCount: Number(raw.unreadCount ?? current?.unreadCount ?? 0),
+            conversationTimestamp: Number(raw.conversationTimestamp ?? current?.conversationTimestamp ?? 0),
+            pinned: Number(raw.pinned ?? current?.pinned ?? 0),
+            archived: Boolean(raw.archived ?? current?.archived ?? false),
+            muteEndTime: Number(raw.muteEndTime ?? current?.muteEndTime ?? 0),
+            isGroup: typeof raw.id === "string" ? raw.id.endsWith("@g.us") : current?.isGroup || false,
+            lastMessageId: typeof raw.lastMessageId === "string" ? raw.lastMessageId : current?.lastMessageId || null,
+            raw: raw,
+            createdAt: current?.createdAt || null,
+            updatedAt: current?.updatedAt || null,
+          });
+        }
+        apply(Array.from(map.values()));
+      }),
+      realtimeService.subscribe("chats.update", (payload) => {
+        if (payload.sessionId !== sessionId) return;
+        const updates = Array.isArray(payload.payload) ? payload.payload as Array<Record<string, unknown>> : [];
+        const map = new Map(chatsRef.current.map((chat) => [chat.jid, chat]));
+        for (const raw of updates) {
+          const jid = typeof raw.id === "string" ? raw.id : "";
+          if (!jid) continue;
+          const current = map.get(jid);
+          if (!current) continue;
+          map.set(jid, {
+            ...current,
+            ...(raw.name !== undefined ? { name: String(raw.name) } : {}),
+            ...(raw.unreadCount !== undefined ? { unreadCount: Number(raw.unreadCount) } : {}),
+            ...(raw.conversationTimestamp !== undefined ? { conversationTimestamp: Number(raw.conversationTimestamp) } : {}),
+            ...(raw.pinned !== undefined ? { pinned: Number(raw.pinned) } : {}),
+            ...(raw.archived !== undefined ? { archived: Boolean(raw.archived) } : {}),
+            ...(raw.muteEndTime !== undefined ? { muteEndTime: Number(raw.muteEndTime) } : {}),
+          });
+        }
+        apply(Array.from(map.values()));
+      }),
+      realtimeService.subscribe("chats.delete", (payload) => {
+        if (payload.sessionId !== sessionId) return;
+        const ids = Array.isArray(payload.payload) ? payload.payload.map(String) : [];
+        apply(chatsRef.current.filter((chat) => !ids.includes(chat.jid)));
+      }),
+      realtimeService.subscribe("messages.upsert", (payload) => {
+        if (payload.sessionId !== sessionId) return;
+        const incoming = Array.isArray(payload.messages) ? payload.messages as Array<Record<string, unknown>> : [];
+        const map = new Map(chatsRef.current.map((chat) => [chat.jid, chat]));
+        for (const message of incoming) {
+          const key = message.key && typeof message.key === "object" ? message.key as Record<string, unknown> : {};
+          const jid = typeof key.remoteJid === "string" ? key.remoteJid : "";
+          const id = typeof key.id === "string" ? key.id : "";
+          if (!jid || !id) continue;
+          const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
+          const current = map.get(jid);
+          if (current) {
+            map.set(jid, { ...current, lastMessageId: id, conversationTimestamp: Math.max(current.conversationTimestamp || 0, timestamp) });
+          }
+        }
+        apply(Array.from(map.values()));
+      }),
+    ];
+
     void refresh().catch(() => undefined);
-
-    let timer: number | undefined;
-    const schedule = () => {
-      timer = window.setTimeout(async () => {
-        if (!mountedRef.current || generation !== generationRef.current) return;
-        try { await refresh(); } catch { /* state already contains the error */ }
-        if (mountedRef.current && generation === generationRef.current) schedule();
-      }, pollMs);
-    };
-    schedule();
-
     return () => {
       mountedRef.current = false;
       generationRef.current += 1;
-      if (timer) window.clearTimeout(timer);
+      unsubs.forEach((unsubscribe) => unsubscribe());
     };
-  }, [pollMs, refresh, sessionId]);
+  }, [apply, refresh, sessionId]);
 
-  const state: WhatsAppChatLoadState = loading ? "loading" : refreshing ? "refreshing" : error ? "error" : chats.length ? "ready" : "idle";
-
-  return { chats, setChats, loading, refreshing, error, state, refresh };
+  const state: WhatsAppChatLoadState = error ? "error" : loading ? "loading" : chats.length ? "ready" : "idle";
+  return { chats, setChats, loading, refreshing: false, error, state, refresh };
 }
