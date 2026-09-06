@@ -1,66 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { sessionService } from "../services/session.service";
+import { realtimeService } from "../services/realtime.service";
 import type { WhatsAppSession } from "../core/types";
 
-export type WhatsAppSessionLoadState = "idle" | "loading" | "refreshing" | "ready" | "error";
+export type WhatsAppSessionLoadState = "idle" | "loading" | "ready" | "error";
 
-export function useWhatsAppSessions(options: { pollMs?: number } = {}) {
-  const pollMs = options.pollMs ?? 8000;
+export function useWhatsAppSessions() {
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const sessionsRef = useRef<WhatsAppSession[]>([]);
 
+  const applySessions = useCallback((next: WhatsAppSession[]) => {
+    sessionsRef.current = next;
+    if (mountedRef.current) setSessions(next);
+  }, []);
+
   const refresh = useCallback(async () => {
-    if (inFlightRef.current) return sessionsRef.current;
-    inFlightRef.current = true;
-    const initial = sessionsRef.current.length === 0;
-    if (initial) setLoading(true);
-    setRefreshing(true);
+    setLoading(true);
     try {
-      setError(null);
       const next = await sessionService.list();
-      sessionsRef.current = next;
-      if (mountedRef.current) setSessions(next);
+      applySessions(next);
+      if (mountedRef.current) {
+        setError(null);
+        setLoading(false);
+      }
+      await realtimeService.connect(next.map((session) => session.sessionId));
       return next;
     } catch (value) {
-      const message = value instanceof Error ? value.message : "Could not load WhatsApp sessions.";
-      if (mountedRef.current) setError(message);
-      throw value;
-    } finally {
-      inFlightRef.current = false;
       if (mountedRef.current) {
+        setError(value instanceof Error ? value.message : "Could not load WhatsApp sessions.");
         setLoading(false);
-        setRefreshing(false);
       }
+      throw value;
     }
-  }, []);
+  }, [applySessions]);
 
   useEffect(() => {
     mountedRef.current = true;
+    const unsubs = [
+      realtimeService.subscribe("qr", (payload) => {
+        const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
+        if (!sessionId) return;
+        const next = sessionsRef.current.map((s) => s.sessionId === sessionId ? { ...s, status: "qr", qr: typeof payload.qr === "string" ? payload.qr : null } : s);
+        applySessions(next);
+      }),
+      realtimeService.subscribe("connection.update", (payload) => {
+        const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
+        const status = typeof payload.status === "string" ? payload.status : "";
+        if (!sessionId || status === "socket_connected" || status === "socket_disconnected") return;
+        const me = payload.me && typeof payload.me === "object" ? payload.me as WhatsAppSession["me"] : undefined;
+        applySessions(sessionsRef.current.map((s) => s.sessionId === sessionId ? { ...s, status, ...(me ? { me } : {}), ...(status === "open" ? { qr: null, lastConnectedAt: new Date().toISOString() } : {}) } : s));
+      }),
+    ];
     void refresh().catch(() => undefined);
-
-    let timer: number | undefined;
-    const schedule = () => {
-      timer = window.setTimeout(async () => {
-        if (!mountedRef.current) return;
-        try { await refresh(); } catch { /* state already contains the error */ }
-        if (mountedRef.current) schedule();
-      }, pollMs);
-    };
-    schedule();
-
     return () => {
       mountedRef.current = false;
-      if (timer) window.clearTimeout(timer);
+      unsubs.forEach((unsubscribe) => unsubscribe());
     };
-  }, [pollMs, refresh]);
+  }, [applySessions, refresh]);
 
-  const state: WhatsAppSessionLoadState = loading ? "loading" : refreshing ? "refreshing" : error ? "error" : sessions.length ? "ready" : "idle";
-
-  return { sessions, loading, refreshing, error, state, refresh };
+  const state: WhatsAppSessionLoadState = error ? "error" : loading ? "loading" : sessions.length ? "ready" : "idle";
+  return { sessions, loading, refreshing: false, error, state, refresh };
 }
