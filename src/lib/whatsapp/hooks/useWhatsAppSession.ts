@@ -4,7 +4,7 @@ import { sessionService } from "../services/session.service";
 import { realtimeService } from "../services/realtime.service";
 import type { WhatsAppSession } from "../core/types";
 
-export function useWhatsAppSession(sessionId: string | null) {
+export function useWhatsAppSession(sessionId: string | null, _options: { pollMs?: number } = {}) {
   const [session, setSession] = useState<WhatsAppSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
