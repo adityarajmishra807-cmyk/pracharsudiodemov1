@@ -1,11 +1,9 @@
 export * from "./core/types";
 export * from "./core/normalizers";
-export * from "./core/socket.client";
 export * from "./hooks/useWhatsAppSessions";
 export * from "./hooks/useWhatsAppSession";
 export * from "./hooks/useWhatsAppChats";
 export * from "./hooks/useWhatsAppMessages";
-export * from "./hooks/useWhatsAppRealtime";
 export { sessionService } from "./services/session.service";
 export { chatService } from "./services/chat.service";
 export { messageService } from "./services/message.service";
