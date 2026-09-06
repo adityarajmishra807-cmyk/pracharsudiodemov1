@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertCircle, CheckCircle2, ChevronRight, Link2, Phone, Plus, RefreshCw, ShieldCheck, Smartphone, Trash2, XCircle, Wifi } from "lucide-react";
+import { AlertCircle, CheckCircle2, Link2, LogOut, Phone, Plus, RefreshCw, Smartphone, Trash2, Wifi } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -8,243 +8,165 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useStore } from "@/lib/store";
-import { checkWhatsAppGateway, getWhatsAppSession, reconnectWhatsAppSession, removeWhatsAppSession, startWhatsAppSession } from "@/lib/whatsapp/gateway.server";
 import { cn } from "@/lib/utils";
-
-type SessionStatus = "CREATED" | "WAITING_FOR_LINK" | "CONNECTED" | "SYNCING" | "READY" | "DISCONNECTED" | "RECONNECTING" | "NEEDS_RELINK" | "ERROR";
-type WhatsAppAccount = { id: string; displayName: string; phoneNumber: string; status: SessionStatus; lastConnectedAt: string | null; lastDisconnectedAt: string | null };
-const STORAGE_KEY = "prachar-whatsapp-accounts-v2";
-
-const statusMeta: Record<SessionStatus, { label: string; className: string; icon: typeof CheckCircle2 }> = {
-  CREATED: { label: "Created", className: "bg-surface text-muted-foreground border-border", icon: AlertCircle },
-  WAITING_FOR_LINK: { label: "Scan QR", className: "bg-primary/10 text-primary border-primary/25", icon: Link2 },
-  CONNECTED: { label: "Connected", className: "bg-success/10 text-success border-success/25", icon: CheckCircle2 },
-  SYNCING: { label: "Syncing", className: "bg-warning/15 text-foreground border-warning/40", icon: RefreshCw },
-  READY: { label: "Ready", className: "bg-success/10 text-success border-success/25", icon: CheckCircle2 },
-  DISCONNECTED: { label: "Disconnected", className: "bg-destructive/10 text-destructive border-destructive/25", icon: XCircle },
-  RECONNECTING: { label: "Reconnecting", className: "bg-primary/10 text-primary border-primary/25", icon: RefreshCw },
-  NEEDS_RELINK: { label: "Scan QR again", className: "bg-warning/15 text-foreground border-warning/40", icon: AlertCircle },
-  ERROR: { label: "Error", className: "bg-destructive/10 text-destructive border-destructive/25", icon: AlertCircle },
-};
-
-function formatDate(value: string | null) {
-  if (!value) return "Never connected";
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-function StatusPill({ status }: { status: SessionStatus }) {
-  const meta = statusMeta[status];
-  const Icon = meta.icon;
-  return <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium", meta.className)}><Icon className={cn("size-3.5", status === "SYNCING" || status === "RECONNECTING" ? "animate-spin" : "")} aria-hidden="true" />{meta.label}</span>;
-}
+import { useStore } from "@/lib/store";
+import { sessionService, useWhatsAppSession, useWhatsAppSessions, type WhatsAppSession } from "@/lib/whatsapp";
 
 export const Route = createFileRoute("/_app/whatsapp")({
-  head: () => ({ meta: [
-    { title: "WhatsApp Manager — Prachar Studio" },
-    { name: "description", content: "Connect multiple WhatsApp accounts by scanning a QR code." },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "WhatsApp Manager — Prachar Studio" },
+      { name: "description", content: "Manage independent WhatsApp Web sessions." },
+    ],
+  }),
   component: WhatsAppManagerPage,
 });
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "open": return "Ready";
+    case "qr": return "Scan QR";
+    case "connecting": return "Connecting";
+    case "close": return "Disconnected";
+    case "logged_out": return "Logged out";
+    default: return "Not started";
+  }
+}
+
+function statusTone(status: string) {
+  switch (status) {
+    case "open": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "qr": return "bg-orange-50 text-orange-700 border-orange-200";
+    case "connecting": return "bg-blue-50 text-blue-700 border-blue-200";
+    case "close":
+    case "logged_out": return "bg-red-50 text-red-700 border-red-200";
+    default: return "bg-slate-50 text-slate-600 border-slate-200";
+  }
+}
+
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium", statusTone(status))}>
+      {status === "open" ? <CheckCircle2 className="size-3.5" /> : status === "connecting" ? <RefreshCw className="size-3.5 animate-spin" /> : <AlertCircle className="size-3.5" />}
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Never";
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function displayName(session: WhatsAppSession, labels: Record<string, string>) {
+  return labels[session.sessionId] || session.me?.name || session.me?.id?.split(":")[0] || session.sessionId;
+}
+
 function WhatsAppManagerPage() {
   const { isOwner } = useStore();
-  const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+  const { sessions, loading, error, refresh } = useWhatsAppSessions({ pollMs: 5000 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [qr, setQr] = useState<string | null>(null);
-  const [gatewayError, setGatewayError] = useState<string | null>(null);
-  const [gatewayStatus, setGatewayStatus] = useState<"checking" | "online" | "offline">("checking");
-  const [linkOpen, setLinkOpen] = useState(false);
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [label, setLabel] = useState("");
 
-  const selected = useMemo(() => accounts.find((account) => account.id === selectedId) ?? accounts[0] ?? null, [accounts, selectedId]);
-
-  const checkGateway = async () => {
-    setGatewayStatus("checking");
-    try {
-      const result = await checkWhatsAppGateway({ data: undefined });
-      if (!result.ok) throw new Error("Gateway health check returned not-OK.");
-      setGatewayStatus("online");
-      setGatewayError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to reach the WhatsApp gateway.";
-      setGatewayStatus("offline");
-      setGatewayError(message);
-      return false;
-    }
-    return true;
-  };
+  const selected = useMemo(() => sessions.find((session) => session.sessionId === selectedId) ?? sessions[0] ?? null, [selectedId, sessions]);
+  const detail = useWhatsAppSession(selected?.sessionId ?? null, { pollMs: 1200 });
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setAccounts(JSON.parse(raw) as WhatsAppAccount[]);
+      const raw = window.localStorage.getItem("prachar-whatsapp-labels-v3");
+      if (raw) setLabels(JSON.parse(raw) as Record<string, string>);
     } catch {
-      // Ignore malformed local prototype storage.
+      setLabels({});
     }
-    void checkGateway();
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
-  }, [accounts]);
+    try {
+      window.localStorage.setItem("prachar-whatsapp-labels-v3", JSON.stringify(labels));
+    } catch {
+      // Presentation-only metadata.
+    }
+  }, [labels]);
 
   useEffect(() => {
-    if (!linkOpen || !selected) return;
-    let timer: number | undefined;
-    let active = true;
+    if (!selectedId && sessions[0]) setSelectedId(sessions[0].sessionId);
+  }, [selectedId, sessions]);
 
-    const poll = async () => {
-      try {
-        const result = await getWhatsAppSession({ data: { id: selected.id } });
-        if (!active) return;
-        setGatewayStatus("online");
-        setGatewayError(result.error);
-        setQr(result.qr);
-        setAccounts((current) => current.map((account) => account.id === selected.id ? { ...account, status: result.status as SessionStatus, phoneNumber: result.phoneNumber || account.phoneNumber, lastConnectedAt: result.lastConnectedAt, lastDisconnectedAt: result.lastDisconnectedAt } : account));
-        if (result.status === "READY") {
-          setLinkOpen(false);
-          setQr(null);
-          toast.success(`${selected.displayName} connected.`);
-          return;
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not read WhatsApp session.";
-        if (active) {
-          setGatewayStatus("offline");
-          setGatewayError(message);
-          setAccounts((current) => current.map((account) => account.id === selected.id ? { ...account, status: "ERROR" } : account));
-        }
-      }
-      timer = window.setTimeout(poll, 1500);
-    };
-
-    void poll();
-    return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, [linkOpen, selected?.id, selected?.displayName]);
-
-  const addAccount = async () => {
-    if (!isOwner) return toast.error("Only the workspace owner can add WhatsApp accounts.");
-    const displayName = name.trim();
-    if (!displayName) return toast.error("Account name is required.");
-
-    const account: WhatsAppAccount = { id: crypto.randomUUID(), displayName, phoneNumber: phone.trim(), status: "CREATED", lastConnectedAt: null, lastDisconnectedAt: null };
-    setAccounts((current) => [account, ...current]);
-    setSelectedId(account.id);
-    setName("");
-    setPhone("");
-    setAddOpen(false);
-    setLinkOpen(true);
-    setQr(null);
-    setGatewayError(null);
-
+  const createSession = async () => {
+    const sessionId = `wa_${crypto.randomUUID().replaceAll("-", "").slice(0, 18)}`;
     try {
-      const result = await startWhatsAppSession({ data: { id: account.id } });
-      setGatewayStatus("online");
-      setGatewayError(result.error);
-      setQr(result.qr);
-      setAccounts((current) => current.map((item) => item.id === account.id ? { ...item, status: result.status as SessionStatus, phoneNumber: result.phoneNumber || item.phoneNumber } : item));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not start WhatsApp connection";
-      setGatewayStatus("offline");
-      setGatewayError(message);
-      setAccounts((current) => current.map((item) => item.id === account.id ? { ...item, status: "ERROR" } : item));
-      toast.error(message);
+      await sessionService.start({ data: { sessionId } });
+      setLabels((current) => ({ ...current, [sessionId]: label.trim() || `WhatsApp ${sessions.length + 1}` }));
+      setSelectedId(sessionId);
+      setLabel("");
+      setAddOpen(false);
+      await refresh();
+      toast.success("WhatsApp session started.");
+    } catch (value) {
+      toast.error(value instanceof Error ? value.message : "Could not start WhatsApp session.");
     }
   };
 
-  const startLinking = async () => {
-    if (!selected) return;
-    setLinkOpen(true);
-    setQr(null);
-    setGatewayError(null);
-    try {
-      const result = await reconnectWhatsAppSession({ data: { id: selected.id } });
-      setGatewayStatus("online");
-      setGatewayError(result.error);
-      setQr(result.qr);
-      setAccounts((current) => current.map((account) => account.id === selected.id ? { ...account, status: result.status as SessionStatus } : account));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not start connection";
-      setGatewayStatus("offline");
-      setGatewayError(message);
-      toast.error(message);
-    }
-  };
-
-  const reconnect = async () => {
+  const startSelected = async () => {
     if (!selected) return;
     try {
-      setAccounts((current) => current.map((account) => account.id === selected.id ? { ...account, status: "RECONNECTING" } : account));
-      await reconnectWhatsAppSession({ data: { id: selected.id } });
-      setLinkOpen(true);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not reconnect";
-      setGatewayStatus("offline");
-      setGatewayError(message);
-      toast.error(message);
+      await sessionService.start({ data: { sessionId: selected.sessionId } });
+      await detail.refresh();
+      await refresh();
+    } catch (value) {
+      toast.error(value instanceof Error ? value.message : "Could not start WhatsApp session.");
     }
   };
 
-  const remove = async () => {
+  const logoutSelected = async () => {
     if (!selected) return;
     try {
-      await removeWhatsAppSession({ data: { id: selected.id } });
-    } catch {
-      // Best effort cleanup for the gateway.
+      await sessionService.logout({ data: { sessionId: selected.sessionId } });
+      await detail.refresh();
+      await refresh();
+      toast.success("WhatsApp session logged out.");
+    } catch (value) {
+      toast.error(value instanceof Error ? value.message : "Could not log out session.");
     }
-    const label = selected.displayName;
-    setAccounts((current) => current.filter((account) => account.id !== selected.id));
-    setSelectedId(null);
-    setQr(null);
-    setGatewayError(null);
-    setLinkOpen(false);
-    toast.success(`${label} removed.`);
   };
 
-  const counts = {
-    total: accounts.length,
-    ready: accounts.filter((account) => account.status === "READY").length,
-    attention: accounts.filter((account) => ["DISCONNECTED", "RECONNECTING", "NEEDS_RELINK", "ERROR"].includes(account.status)).length,
+  const removeSelected = async () => {
+    if (!selected) return;
+    try {
+      await sessionService.remove({ data: { sessionId: selected.sessionId } });
+      setLabels((current) => {
+        const next = { ...current };
+        delete next[selected.sessionId];
+        return next;
+      });
+      setSelectedId(null);
+      await refresh();
+      toast.success("WhatsApp session deleted.");
+    } catch (value) {
+      toast.error(value instanceof Error ? value.message : "Could not delete session.");
+    }
   };
+
+  const status = detail.session?.status || selected?.status || "not_started";
+  const readyCount = sessions.filter((session) => session.status === "open").length;
+  const attentionCount = sessions.filter((session) => ["close", "logged_out"].includes(session.status)).length;
 
   return (
     <div className="space-y-5">
-      <PageHeader title="WhatsApp Manager" description="Connect multiple WhatsApp accounts. Scan the QR code with WhatsApp → Linked devices." actions={<Button onClick={() => setAddOpen(true)} disabled={!isOwner}><Plus className="size-4" aria-hidden="true" />Add WhatsApp</Button>} />
+      <PageHeader title="WhatsApp Manager" description="Manage independent WhatsApp Web sessions from the Baileys backend." actions={<Button onClick={() => setAddOpen(true)} disabled={!isOwner}><Plus className="size-4" />Add WhatsApp</Button>} />
 
-      <div className="rounded-xl border border-border bg-card px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5"><Wifi className={cn("size-4", gatewayStatus === "online" ? "text-success" : gatewayStatus === "offline" ? "text-destructive" : "text-muted-foreground")} /><span className="text-sm font-medium text-navy">WhatsApp connection service</span><StatusPill status={gatewayStatus === "online" ? "READY" : gatewayStatus === "offline" ? "ERROR" : "CREATED"} /></div>
-          <Button variant="outline" size="sm" onClick={checkGateway} disabled={gatewayStatus === "checking"}>{gatewayStatus === "checking" ? "Checking…" : "Check connection"}</Button>
-        </div>
-        {gatewayError ? <div className="mt-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm"><p className="font-medium text-destructive">Connection diagnostic</p><p className="mt-1 break-words text-destructive/90">{gatewayError}</p><p className="mt-2 text-xs text-muted-foreground">This message distinguishes a Vercel → Railway configuration problem from a WhatsApp session problem.</p></div> : null}
-      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"><div className="flex items-center gap-2.5"><Wifi className={cn("size-4", error ? "text-destructive" : "text-emerald-600")} /><span className="text-sm font-medium text-navy">WhatsApp backend</span><span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>{error ? "Unavailable" : loading ? "Checking" : "Online"}</span></div><Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn("size-4", loading && "animate-spin")} />Refresh</Button></div>
+      {error ? <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm break-words text-destructive">{error}</div> : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs font-medium uppercase text-muted-foreground">Accounts</p><p className="mt-1 text-2xl font-bold text-navy">{counts.total}</p></div>
-        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs font-medium uppercase text-muted-foreground">Ready</p><p className="mt-1 text-2xl font-bold text-navy">{counts.ready}</p></div>
-        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs font-medium uppercase text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-navy">{counts.attention}</p></div>
-      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-xl border border-border bg-card p-4"><p className="text-xs uppercase text-muted-foreground">Accounts</p><p className="mt-1 text-2xl font-bold text-navy">{sessions.length}</p></div><div className="rounded-xl border border-border bg-card p-4"><p className="text-xs uppercase text-muted-foreground">Ready</p><p className="mt-1 text-2xl font-bold text-navy">{readyCount}</p></div><div className="rounded-xl border border-border bg-card p-4"><p className="text-xs uppercase text-muted-foreground">Needs attention</p><p className="mt-1 text-2xl font-bold text-navy">{attentionCount}</p></div></div>
 
-      <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
-        <section className="rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-4 py-3"><h2 className="font-semibold text-navy">Accounts</h2><p className="text-xs text-muted-foreground">Independent connections</p></div>
-          {accounts.length ? <div className="divide-y divide-border">{accounts.map((account) => <button key={account.id} type="button" onClick={() => { setSelectedId(account.id); setQr(null); setGatewayError(null); }} className={cn("w-full px-4 py-3 text-left transition-colors hover:bg-surface/70", selected?.id === account.id && "bg-surface")}><div className="flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-navy text-white"><Phone className="size-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate font-medium text-navy">{account.displayName}</span><ChevronRight className="size-4 shrink-0" /></span><span className="block text-xs text-muted-foreground">{account.phoneNumber || "Phone number appears after linking"}</span><span className="mt-2 block"><StatusPill status={account.status} /></span></span></div></button>)}</div> : <div className="px-5 py-12 text-center"><Smartphone className="mx-auto size-7 text-navy" /><p className="mt-3 font-semibold text-navy">No WhatsApp accounts</p><p className="mt-1 text-sm text-muted-foreground">Add one and scan its QR code.</p></div>}
-        </section>
+      <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]"><section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border px-4 py-3"><p className="font-semibold text-navy">Accounts</p><p className="text-xs text-muted-foreground">Loaded from the backend</p></div>{sessions.length === 0 ? <div className="px-5 py-12 text-center"><Smartphone className="mx-auto size-8 text-muted-foreground" /><p className="mt-3 font-semibold text-navy">No sessions</p><p className="mt-1 text-sm text-muted-foreground">Add a WhatsApp account to begin.</p></div> : <div className="divide-y divide-border">{sessions.map((session) => <button key={session.sessionId} type="button" onClick={() => setSelectedId(session.sessionId)} className={cn("w-full px-4 py-4 text-left hover:bg-surface", selected?.sessionId === session.sessionId && "bg-surface")}><div className="flex items-start gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-navy text-white"><Phone className="size-4" /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate font-medium text-navy">{displayName(session, labels)}</span><StatusPill status={session.status} /></div><p className="mt-1 truncate text-xs text-muted-foreground">{session.me?.id?.split(":")[0] || session.sessionId}</p></div></div></button>)}</div>}</section>
 
-        <section className="rounded-xl border border-border bg-card">
-          {selected ? (
-            <>
-              <div className="flex flex-col gap-4 border-b border-border p-5 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-navy">{selected.displayName}</h2><StatusPill status={selected.status} /></div><p className="mt-1 text-sm text-muted-foreground">{selected.phoneNumber || "Phone number will appear after QR scan"}</p></div><div className="flex gap-2">{selected.status === "READY" ? <Button variant="outline" onClick={reconnect}><RefreshCw className="size-4" />Reconnect</Button> : <Button onClick={startLinking}><Link2 className="size-4" />Show QR</Button>}<Button variant="ghost" size="icon" aria-label="Remove account" onClick={remove}><Trash2 className="size-4 text-destructive" /></Button></div></div>
-              <div className="p-5"><div className="rounded-xl border border-border bg-surface p-6 text-center"><div className="mx-auto flex min-h-72 max-w-sm items-center justify-center rounded-xl bg-white p-4 shadow-sm">{qr ? <img src={qr} alt="Scan this QR code with WhatsApp Linked devices" className="size-64 max-w-full" /> : selected.status === "READY" ? <div><CheckCircle2 className="mx-auto size-10 text-success" /><p className="mt-3 font-semibold text-navy">WhatsApp connected</p></div> : gatewayError ? <div><AlertCircle className="mx-auto size-10 text-destructive" /><p className="mt-3 font-semibold text-destructive">Connection failed</p><p className="mt-2 max-w-xs break-words text-sm text-muted-foreground">{gatewayError}</p><Button className="mt-4" onClick={startLinking}>Try again</Button></div> : <div><RefreshCw className="mx-auto size-8 animate-spin text-muted-foreground" /><p className="mt-3 font-medium text-navy">Generating QR code…</p></div>}</div><p className="mt-5 text-base font-semibold text-navy">{selected.status === "READY" ? "Connected" : "Scan with WhatsApp"}</p><p className="mt-1 text-sm text-muted-foreground">On your phone: WhatsApp → Linked devices → Link a device → scan this code.</p>{selected.status !== "READY" ? <span className="mt-3 inline-flex"><StatusPill status={selected.status} /></span> : null}</div><div className="mt-4 grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><div className="flex gap-3"><ShieldCheck className="size-5 text-navy" /><div><p className="font-medium text-navy">Separate session</p><p className="mt-1 text-sm text-muted-foreground">Each account has its own saved linked-device session.</p></div></div></div><div className="rounded-xl border border-border p-4"><p className="text-xs font-medium uppercase text-muted-foreground">Last connected</p><p className="mt-2 font-medium text-navy">{formatDate(selected.lastConnectedAt)}</p></div></div></div>
-            </>
-          ) : <div className="flex min-h-[26rem] items-center justify-center p-8 text-center"><div><Smartphone className="mx-auto size-8 text-navy" /><h2 className="mt-3 font-semibold text-navy">Select a WhatsApp account</h2></div></div>}
-        </section>
-      </div>
+        <section className="rounded-xl border border-border bg-card p-5">{selected ? <><div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-semibold text-navy">{displayName(selected, labels)}</h2><StatusPill status={status} /></div><p className="mt-1 text-sm text-muted-foreground">Session ID: {selected.sessionId}</p>{detail.session?.me?.id ? <p className="mt-1 text-sm text-muted-foreground">Phone: {detail.session.me.id.split(":")[0]}</p> : null}</div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void startSelected()} disabled={status === "connecting" || status === "open"}><RefreshCw className="size-4" />Start</Button>{status === "open" ? <Button variant="outline" onClick={() => void logoutSelected()}><LogOut className="size-4" />Log out</Button> : null}<Button variant="ghost" size="icon" aria-label="Delete session" onClick={() => void removeSelected()}><Trash2 className="size-4 text-destructive" /></Button></div></div><div className="mt-5 rounded-xl border border-border bg-surface p-6 text-center"><div className="mx-auto flex min-h-80 max-w-md items-center justify-center rounded-xl bg-white p-5 shadow-sm">{detail.session?.qr ? <img src={detail.session.qr} alt="Scan this WhatsApp QR code" className="size-72 max-w-full" /> : status === "open" ? <div><CheckCircle2 className="mx-auto size-14 text-emerald-600" /><p className="mt-3 text-lg font-semibold text-navy">WhatsApp connected</p><p className="mt-1 text-sm text-muted-foreground">This number is ready for Inbox.</p></div> : <div><Link2 className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-medium text-navy">Waiting for QR</p><p className="mt-1 max-w-xs text-sm text-muted-foreground">Click Start. The backend will generate the live QR code.</p></div>}</div><p className="mt-4 text-sm text-muted-foreground">WhatsApp → Linked devices → Link a device</p></div><div className="mt-4 grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><p className="text-xs uppercase text-muted-foreground">Last connected</p><p className="mt-2 font-medium text-navy">{formatDate(detail.session?.lastConnectedAt)}</p></div><div className="rounded-xl border border-border p-4"><p className="text-xs uppercase text-muted-foreground">Last disconnect</p><p className="mt-2 break-words font-medium text-navy">{detail.error || detail.session?.lastDisconnectReason || "None"}</p></div></div></> : <div className="flex min-h-[30rem] items-center justify-center text-center"><div><Smartphone className="mx-auto size-9 text-muted-foreground" /><p className="mt-3 font-semibold text-navy">Select a WhatsApp account</p></div></div>}</section></div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Add WhatsApp</DialogTitle><DialogDescription>Create an account, then scan the QR code with WhatsApp Linked devices.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-1.5"><Label htmlFor="wa-name">Account name</Label><Input id="wa-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sales WhatsApp" /></div><div className="space-y-1.5"><Label htmlFor="wa-phone">Phone number (optional)</Label><Input id="wa-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Will be detected after linking" /></div></div><DialogFooter><Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button><Button onClick={addAccount}>Create &amp; show QR</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Add WhatsApp account</DialogTitle><DialogDescription>Create a persistent session in the backend. Scan its QR code next.</DialogDescription></DialogHeader><div className="space-y-2"><Label htmlFor="wa-label">Account name</Label><Input id="wa-label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Sales WhatsApp" /></div><DialogFooter><Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button><Button onClick={() => void createSession()}>Create session</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }
