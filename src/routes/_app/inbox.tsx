@@ -1,4 +1,4 @@
-import { MessageSquare, RefreshCw, Smartphone } from "lucide-react";
+import { Loader2, MessageSquare, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
@@ -29,16 +29,7 @@ function InboxPage() {
   const { chats, loading: chatsLoading, refreshing: chatsRefreshing, error: chatsError, refresh: refreshChats } = useWhatsAppChats(activeSession?.sessionId || null, { pollMs: 7000 });
   const activeJid = chats.some((chat) => chat.jid === search.chat) ? search.chat! : chats[0]?.jid || null;
   const activeChat = chats.find((chat) => chat.jid === activeJid) || null;
-  const {
-    messages,
-    loading: messagesLoading,
-    loadingOlder: messagesLoadingOlder,
-    refreshing: messagesRefreshing,
-    hasMore: messagesHasMore,
-    error: messagesError,
-    refresh: refreshMessages,
-    loadOlder: loadOlderMessages,
-  } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 6000, limit: 100 });
+  const { messages, loading: messagesLoading, loadingOlder: messagesLoadingOlder, refreshing: messagesRefreshing, hasMore: messagesHasMore, error: messagesError, refresh: refreshMessages, loadOlder: loadOlderMessages } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 6000, limit: 100 });
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,6 +43,7 @@ function InboxPage() {
   }, [accountId, activeJid, navigate, search.chat]);
 
   const refreshAll = useCallback(async () => {
+    if (sessionsRefreshing || chatsRefreshing || messagesRefreshing) return;
     setPageError(null);
     try {
       await refreshSessions();
@@ -60,14 +52,13 @@ function InboxPage() {
     } catch (value) {
       setPageError(value instanceof Error ? value.message : "Could not refresh WhatsApp inbox.");
     }
-  }, [refreshChats, refreshMessages, refreshSessions]);
+  }, [chatsRefreshing, messagesRefreshing, refreshChats, refreshMessages, refreshSessions, sessionsRefreshing]);
 
   const error = pageError || sessionsError || chatsError || messagesError;
   const inboxRefreshing = sessionsRefreshing || chatsRefreshing || messagesRefreshing;
-  const inboxLoading = sessionsLoading || chatsLoading || messagesLoading;
 
   if (sessionsLoading && sessions.length === 0) {
-    return <div className="space-y-5"><PageHeader title="WhatsApp Inbox" /><EmptyState icon={RefreshCw} title="Loading WhatsApp accounts" description="Connecting to the WhatsApp backend…" /></div>;
+    return <div className="space-y-5"><PageHeader title="WhatsApp Inbox" /><EmptyState icon={Loader2} title="Loading WhatsApp accounts" description="Connecting to the WhatsApp backend…" /></div>;
   }
 
   if (sessions.length === 0) {
@@ -79,18 +70,18 @@ function InboxPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-busy={inboxRefreshing || sessionsLoading || chatsLoading || messagesLoading}>
       <PageHeader
         title="WhatsApp Inbox"
         description="Live conversations from your connected WhatsApp accounts."
-        actions={<div className="flex w-full items-center gap-2 sm:w-auto"><WhatsAppAccountSelect sessions={readySessions} value={accountId} onChange={(value) => void navigate({ search: { account: value, chat: undefined } })} /><Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={inboxRefreshing} aria-label="Refresh inbox"><RefreshCw className={inboxRefreshing ? "size-4 animate-spin" : "size-4"} /></Button></div>}
+        actions={<div className="flex w-full items-center gap-2 sm:w-auto"><WhatsAppAccountSelect sessions={readySessions} value={accountId} loading={sessionsLoading || sessionsRefreshing} onChange={(value) => void navigate({ search: { account: value, chat: undefined } })} /><Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={inboxRefreshing} aria-label="Refresh inbox">{inboxRefreshing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}</Button></div>}
       />
 
       {error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive break-words">{error}</div> : null}
 
       <div className="grid min-h-0 overflow-hidden rounded-xl border border-border bg-card lg:h-[calc(100svh-12.5rem)] lg:grid-cols-[340px_minmax(0,1fr)]">
         <aside className={`min-h-0 overflow-y-auto border-border lg:border-r ${activeChat ? "hidden lg:block" : "block"}`}>
-          <WhatsAppChatList chats={chats} selectedJid={activeJid} loading={chatsLoading} onSelect={(jid) => void navigate({ search: { account: accountId, chat: jid } })} />
+          <WhatsAppChatList chats={chats} selectedJid={activeJid} loading={chatsLoading} refreshing={chatsRefreshing} onSelect={(jid) => void navigate({ search: { account: accountId, chat: jid } })} />
         </aside>
         <section className={`flex min-h-0 min-w-0 ${activeChat ? "flex" : "hidden lg:flex"}`}>
           <WhatsAppChatThread
