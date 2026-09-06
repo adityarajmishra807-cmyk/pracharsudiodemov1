@@ -55,6 +55,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const checkWhatsAppBackend = createServerFn({ method: "POST" }).handler(() => request<WhatsAppHealth>("/health"));
 export const listWhatsAppSessions = createServerFn({ method: "POST" }).handler(async () => (await request<ApiEnvelope<WhatsAppSession[]>>("/api/sessions")).data);
 
+export const getWhatsAppRealtimeToken = createServerFn({ method: "POST" })
+  .validator((value: unknown) => z.object({ sessionIds: z.array(SessionId).min(1).max(100) }).parse(value))
+  .handler(async ({ data }) => (await request<ApiEnvelope<{ token: string }>>("/api/sessions/realtime-token", {
+    method: "POST",
+    body: JSON.stringify({ sessionIds: data.sessionIds }),
+  })).data.token);
+
 export const startWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(({ data }) => request<{ success: boolean; message?: string }>(`/api/sessions/${encodeURIComponent(data.sessionId)}/start`, { method: "POST" }));
