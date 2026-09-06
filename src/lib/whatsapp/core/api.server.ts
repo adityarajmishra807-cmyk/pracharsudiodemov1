@@ -10,8 +10,7 @@ import type {
   WhatsAppSession,
 } from "./types";
 
-const backendUrl = () =>
-  (process.env.WHATSAPP_BACKEND_URL || "").replace(/\/$/, "");
+const backendUrl = () => (process.env.WHATSAPP_BACKEND_URL || "").replace(/\/$/, "");
 const backendKey = () => process.env.WHATSAPP_BACKEND_API_KEY || "";
 
 const SessionId = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
@@ -57,10 +56,13 @@ export const listWhatsAppSessions = createServerFn({ method: "POST" }).handler(a
 
 export const getWhatsAppRealtimeToken = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionIds: z.array(SessionId).min(1).max(100) }).parse(value))
-  .handler(async ({ data }) => (await request<ApiEnvelope<{ token: string }>>("/api/sessions/realtime-token", {
-    method: "POST",
-    body: JSON.stringify({ sessionIds: data.sessionIds }),
-  })).data.token);
+  .handler(async ({ data }) => {
+    const token = (await request<ApiEnvelope<{ token: string }>>("/api/sessions/realtime-token", {
+      method: "POST",
+      body: JSON.stringify({ sessionIds: data.sessionIds }),
+    })).data.token;
+    return { token, url: backendUrl() };
+  });
 
 export const startWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
