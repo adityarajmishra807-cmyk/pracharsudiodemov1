@@ -15,14 +15,14 @@ function mergeMessages(current: WhatsAppMessage[], incoming: WhatsAppMessage[]) 
 function fromSocketMessage(raw: Record<string, unknown>): WhatsAppMessage | null {
   const key = raw.key && typeof raw.key === "object" ? raw.key as Record<string, unknown> : {};
   const id = typeof key.id === "string" ? key.id : "";
-  const jid = typeof key.remoteJid === "string" ? key.remoteJid : "";
-  if (!id || !jid) return null;
+  const remoteJid = typeof key.remoteJid === "string" ? key.remoteJid : "";
+  if (!id || !remoteJid) return null;
   const content = raw.message && typeof raw.message === "object" ? raw.message : {};
   const messageType = Object.keys(content as Record<string, unknown>).find((key) => key !== "messageContextInfo") || "conversation";
   return {
     messageId: id,
     sessionId: String(raw.sessionId ?? ""),
-    jid,
+    jid: remoteJid,
     fromMe: Boolean(key.fromMe),
     participant: typeof key.participant === "string" ? key.participant : null,
     messageTimestamp: Number(raw.messageTimestamp || Math.floor(Date.now() / 1000)),
@@ -35,7 +35,7 @@ function fromSocketMessage(raw: Record<string, unknown>): WhatsAppMessage | null
   };
 }
 
-export function useWhatsAppMessages(sessionId: string | null, jid: string | null, options: { limit?: number } = {}) {
+export function useWhatsAppMessages(sessionId: string | null, jid: string | null, options: { limit?: number; pollMs?: number } = {}) {
   const limit = Math.min(Math.max(options.limit ?? 100, 20), 100);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,8 +120,7 @@ export function useWhatsAppMessages(sessionId: string | null, jid: string | null
       realtimeService.subscribe("messages.upsert", (payload) => {
         if (payload.sessionId !== sessionId || !Array.isArray(payload.messages)) return;
         const incoming = (payload.messages as Array<Record<string, unknown>>).map(fromSocketMessage).filter((m): m is WhatsAppMessage => Boolean(m && m.jid === jid));
-        if (!incoming.length) return;
-        apply(mergeMessages(messagesRef.current, incoming));
+        if (incoming.length) apply(mergeMessages(messagesRef.current, incoming));
       }),
       realtimeService.subscribe("messages.update", (payload) => {
         if (payload.sessionId !== sessionId || !Array.isArray(payload.payload)) return;
