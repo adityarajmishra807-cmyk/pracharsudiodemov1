@@ -11,14 +11,16 @@ export function useWhatsAppSessions(options: { pollMs?: number } = {}) {
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
+  const sessionsRef = useRef<WhatsAppSession[]>([]);
 
   const refresh = useCallback(async () => {
-    if (inFlightRef.current) return sessions;
+    if (inFlightRef.current) return sessionsRef.current;
     inFlightRef.current = true;
     setRefreshing(true);
     try {
       setError(null);
       const next = await sessionService.list();
+      sessionsRef.current = next;
       if (mountedRef.current) setSessions(next);
       return next;
     } catch (value) {
@@ -32,7 +34,7 @@ export function useWhatsAppSessions(options: { pollMs?: number } = {}) {
         setRefreshing(false);
       }
     }
-  }, [sessions]);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
