@@ -64,12 +64,30 @@ export type ApiEnvelope<T> = {
   message?: string;
 };
 
-export type WhatsAppMessageInput = {
-  type: "text";
-  text: string;
-  quotedMessageId?: string;
-  contextInfo?: Record<string, unknown>;
-};
+export type WhatsAppMessageInput =
+  | {
+      type: "text";
+      text: string;
+      quotedMessageId?: string;
+      contextInfo?: Record<string, unknown>;
+    }
+  | {
+      type: "image" | "video" | "sticker";
+      caption?: string;
+      mimetype?: string;
+      fileName?: string;
+      url?: string;
+      quotedMessageId?: string;
+      contextInfo?: Record<string, unknown>;
+      gifPlayback?: boolean;
+    }
+  | {
+      type: "contact";
+      displayName: string;
+      vcard: string;
+      quotedMessageId?: string;
+      contextInfo?: Record<string, unknown>;
+    };
 
 export function jidToPhone(jid: string) {
   return jid.replace(/@.*$/, "");
@@ -86,32 +104,31 @@ function unwrapMessage(value: unknown): Record<string, unknown> | null {
 export function extractMessageText(content: unknown): string {
   const message = unwrapMessage(content);
   if (!message) return "";
-  const direct = ["conversation", "text"];
-  for (const key of direct) {
+  for (const key of ["conversation", "text"]) {
     const value = message[key];
     if (typeof value === "string" && value) return value;
   }
-
   const candidates = [
     "extendedTextMessage",
     "imageMessage",
     "videoMessage",
     "documentMessage",
+    "stickerMessage",
+    "contactMessage",
+    "contactsArrayMessage",
     "buttonsResponseMessage",
     "listResponseMessage",
     "templateButtonReplyMessage",
   ];
-
   for (const key of candidates) {
     const nested = message[key];
     if (!nested || typeof nested !== "object") continue;
     const obj = nested as Record<string, unknown>;
-    for (const field of ["text", "caption", "selectedDisplayText", "title"]) {
+    for (const field of ["text", "caption", "selectedDisplayText", "title", "displayName"]) {
       const value = obj[field];
       if (typeof value === "string" && value) return value;
     }
   }
-
   return "";
 }
 
