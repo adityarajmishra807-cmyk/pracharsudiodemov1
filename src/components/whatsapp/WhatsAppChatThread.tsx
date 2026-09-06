@@ -1,5 +1,5 @@
 import { ArrowLeft, CheckCheck, MoreVertical, Send, Smile, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { WhatsAppChat, WhatsAppMessage } from "@/lib/whatsapp";
@@ -24,19 +24,28 @@ export function WhatsAppChatThread({
   chat,
   messages,
   loading,
+  loadingOlder,
+  hasMore,
   onBack,
   onRefresh,
+  onLoadOlder,
 }: {
   sessionId: string;
   chat: WhatsAppChat | null;
   messages: WhatsAppMessage[];
   loading: boolean;
+  loadingOlder: boolean;
+  hasMore: boolean;
   onBack: () => void;
-  onRefresh: () => Promise<void> | void;
+  onRefresh: () => Promise<WhatsAppMessage[] | void> | void;
+  onLoadOlder: () => Promise<WhatsAppMessage[] | void> | void;
 }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [emoji, setEmoji] = useState("👍");
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const hasInitializedScrollRef = useRef(false);
+  const previousMessageCountRef = useRef(0);
 
   const ordered = useMemo(() => sortMessages(messages), [messages]);
 
@@ -46,9 +55,54 @@ export function WhatsAppChatThread({
     void messageService.markRead({ data: { sessionId, jid: chat.jid, messageIds: ids } }).catch(() => undefined);
   }, [chat, ordered, sessionId]);
 
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (!element || ordered.length === 0) return;
+    if (!hasInitializedScrollRef.current) {
+      element.scrollTop = element.scrollHeight;
+      hasInitializedScrollRef.current = true;
+      previousMessageCountRef.current = ordered.length;
+      return;
+    }
+
+    const previousCount = previousMessageCountRef.current;
+    if (ordered.length > previousCount && element.scrollHeight - element.clientHeight - element.scrollTop < 160) {
+      element.scrollTop = element.scrollHeight;
+    }
+    previousMessageCountRef.current = ordered.length;
+  }, [ordered.length]);
+
+  useEffect(() => {
+    hasInitializedScrollRef.current = false;
+    previousMessageCountRef.current = 0;
+  }, [chat?.jid, sessionId]);
+
   if (!chat) {
     return <div className="flex flex-1 items-center justify-center p-8 text-center"><p className="text-sm text-muted-foreground">Select a conversation.</p></div>;
   }
+
+  const loadOlder = async () => {
+    const element = messagesRef.current;
+    if (!element || loadingOlder || !hasMore) return;
+    const previousHeight = element.scrollHeight;
+    const previousTop = element.scrollTop;
+    try {
+      await onLoadOlder();
+      requestAnimationFrame(() => {
+        const current = messagesRef.current;
+        if (!current) return;
+        current.scrollTop = current.scrollHeight - previousHeight + previousTop;
+      });
+    } catch {
+      // Hook surfaces the error in the inbox.
+    }
+  };
+
+  const handleScroll = () => {
+    const element = messagesRef.current;
+    if (!element || loadingOlder || !hasMore) return;
+    if (element.scrollTop <= 120) void loadOlder();
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -91,7 +145,9 @@ export function WhatsAppChatThread({
         <div className="min-w-0 flex-1"><p className="truncate font-semibold text-navy">{titleFor(chat)}</p><p className="truncate text-xs text-muted-foreground">{chat.isGroup ? "Group" : chat.jid.split("@")[0]}</p></div>
       </header>
 
-      <div className="flex-1 overflow-y-auto bg-surface p-4 space-y-2">
+      <div ref={messagesRef} onScroll={handleScroll} className="flex-1 overflow-y-auto bg-surface p-4 space-y-2">
+        {loadingOlder ? <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">Loading older messages…</div> : null}
+        {!hasMore && ordered.length > 0 ? <div className="mx-auto mb-3 w-fit rounded-full px-3 py-1 text-[11px] text-muted-foreground">Beginning of conversation</div> : null}
         {loading && ordered.length === 0 ? <div className="py-12 text-center text-sm text-muted-foreground">Loading messages…</div> : null}
         {!loading && ordered.length === 0 ? <div className="py-12 text-center text-sm text-muted-foreground">No messages yet.</div> : null}
         {ordered.map((message) => {
