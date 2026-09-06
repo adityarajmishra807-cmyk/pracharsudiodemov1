@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { MessageSquare, RefreshCw, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -29,7 +29,15 @@ function InboxPage() {
   const { chats, loading: chatsLoading, error: chatsError, refresh: refreshChats } = useWhatsAppChats(activeSession?.sessionId || null, { pollMs: 4000 });
   const activeJid = chats.some((chat) => chat.jid === search.chat) ? search.chat! : chats[0]?.jid || null;
   const activeChat = chats.find((chat) => chat.jid === activeJid) || null;
-  const { messages, loading: messagesLoading, error: messagesError, refresh: refreshMessages } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 2500, limit: 100 });
+  const {
+    messages,
+    loading: messagesLoading,
+    loadingOlder: messagesLoadingOlder,
+    hasMore: messagesHasMore,
+    error: messagesError,
+    refresh: refreshMessages,
+    loadOlder: loadOlderMessages,
+  } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 2500, limit: 100 });
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,8 +95,11 @@ function InboxPage() {
             chat={activeChat}
             messages={messages}
             loading={messagesLoading}
+            loadingOlder={messagesLoadingOlder}
+            hasMore={messagesHasMore}
             onBack={() => void navigate({ search: { account: accountId, chat: undefined } })}
             onRefresh={refreshMessages}
+            onLoadOlder={loadOlderMessages}
           />
         </section>
       </div>
