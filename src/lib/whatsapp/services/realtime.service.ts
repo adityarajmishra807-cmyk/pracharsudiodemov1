@@ -29,54 +29,39 @@ class WhatsAppRealtimeService {
       this.disconnect();
       return;
     }
-
     if (this.socket?.connected && this.sessionKey === key) return;
     if (this.connectPromise && this.sessionKey === key) return this.connectPromise;
 
     this.disconnect();
     this.sessionKey = key;
-
     this.connectPromise = (async () => {
-      const token = await getWhatsAppRealtimeToken({ data: { sessionIds: ids } });
-      if (this.sessionKey !== key) return;
+      const { token, url } = await getWhatsAppRealtimeToken({ data: { sessionIds: ids } });
+      if (!url || this.sessionKey !== key) return;
 
-      const root = typeof window !== "undefined" ? undefined : undefined;
-      const backendUrl = import.meta.env.VITE_WHATSAPP_BACKEND_URL ||
-        (typeof window !== "undefined" ? "https://pracharsudiodemov1-production.up.railway.app" : undefined);
-      if (!backendUrl) throw new Error("WhatsApp realtime backend URL is not configured.");
-
-      const socket = io(backendUrl, {
+      const socket = io(url, {
         transports: ["websocket"],
         autoConnect: false,
         auth: { realtimeToken: token },
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
       });
       this.socket = socket;
 
       const events: WhatsAppRealtimeEvent[] = [
-        "qr",
-        "connection.update",
-        "messages.upsert",
-        "messages.update",
-        "messages.delete",
-        "chats.upsert",
-        "chats.update",
-        "chats.delete",
-        "socket.error",
+        "qr", "connection.update", "messages.upsert", "messages.update",
+        "messages.delete", "chats.upsert", "chats.update", "chats.delete", "socket.error",
       ];
       for (const event of events) {
         socket.on(event, (payload: EventPayload = {}) => this.emit(event, payload));
       }
-
       socket.on("connect", () => {
         for (const id of ids) socket.emit("join", id);
         this.emit("connection.update", { status: "socket_connected", sessionIds: ids });
       });
-      socket.on("disconnect", (reason) => {
-        this.emit("connection.update", { status: "socket_disconnected", reason });
-      });
-      socket.on("connect_error", (error) => {
-        this.emit("socket.error", { error: error.message });
-      });
+      socket.on("disconnect", (reason) => this.emit("connection.update", { status: "socket_disconnected", reason }));
+      socket.on("connect_error", (error) => this.emit("socket.error", { error: error.message }));
 
       await new Promise<void>((resolve, reject) => {
         const onConnect = () => { cleanup(); resolve(); };
@@ -91,22 +76,22 @@ class WhatsAppRealtimeService {
       });
     })();
 
-    try {
-      await this.connectPromise;
-    } finally {
-      this.connectPromise = null;
-    }
+    try { await this.connectPromise; } finally { this.connectPromise = null; }
   }
 
   subscribe(event: WhatsAppRealtimeEvent, listener: Listener) {
     const set = this.listeners.get(event) ?? new Set<Listener>();
     set.add(listener);
     this.listeners.set(event, set);
-    return () => set.delete(listener);
+    return () => {
+      set.delete(listener);
+      if (!set.size) this.listeners.delete(event);
+    };
   }
 
   disconnect() {
     if (this.socket) {
+      this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
     }
