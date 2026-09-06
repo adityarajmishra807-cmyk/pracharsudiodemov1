@@ -24,17 +24,25 @@ export function useWhatsAppMessages(
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
-  const olderInFlightRef = useRef(false);
+
   const mountedRef = useRef(true);
+  const generationRef = useRef(0);
   const initializedRef = useRef(false);
   const messagesRef = useRef<WhatsAppMessage[]>([]);
-  const generationRef = useRef(0);
+
+  // One request queue for the whole hook. This guarantees that refresh/history
+  // calls never overlap, even when the selected chat changes while a request is
+  // still in flight.
+  const queueRef = useRef(Promise.resolve());
 
   const refresh = useCallback(async () => {
-    if (!sessionId || !jid) {
+    const requestGeneration = generationRef.current;
+    const requestSessionId = sessionId;
+    const requestJid = jid;
+
+    if (!requestSessionId || !requestJid) {
       messagesRef.current = [];
-      if (mountedRef.current) {
+      if (mountedRef.current && requestGeneration === generationRef.current) {
         setMessages([]);
         setHasMore(false);
         setLoading(false);
@@ -42,32 +50,42 @@ export function useWhatsAppMessages(
       }
       return [];
     }
-    if (inFlightRef.current || olderInFlightRef.current) return messagesRef.current;
-    inFlightRef.current = true;
-    if (mountedRef.current) {
+
+    if (mountedRef.current && requestGeneration === generationRef.current) {
       if (!initializedRef.current) setLoading(true);
       else setRefreshing(true);
     }
-    try {
-      setError(null);
-      const latest = await messageService.history({ data: { sessionId, jid, limit } });
+
+    const run = async () => {
+      const latest = await messageService.history({
+        data: { sessionId: requestSessionId, jid: requestJid, limit },
+      });
+
+      // A response belongs only to the chat/session that requested it.
+      if (!mountedRef.current || requestGeneration !== generationRef.current) return latest;
+
       const merged = mergeMessages(messagesRef.current, latest);
       messagesRef.current = merged;
-      if (mountedRef.current) {
-        setMessages(merged);
-        if (!initializedRef.current) {
-          setHasMore(latest.length >= limit);
-          initializedRef.current = true;
-        }
+      setMessages(merged);
+      if (!initializedRef.current) {
+        setHasMore(latest.length >= limit);
+        initializedRef.current = true;
       }
+      setError(null);
       return latest;
+    };
+
+    const queued = queueRef.current.then(run, run);
+    queueRef.current = queued.then(() => undefined, () => undefined);
+
+    try {
+      return await queued;
     } catch (value) {
       const message = value instanceof Error ? value.message : "Could not load WhatsApp messages.";
-      if (mountedRef.current) setError(message);
+      if (mountedRef.current && requestGeneration === generationRef.current) setError(message);
       throw value;
     } finally {
-      inFlightRef.current = false;
-      if (mountedRef.current) {
+      if (mountedRef.current && requestGeneration === generationRef.current) {
         setLoading(false);
         setRefreshing(false);
       }
@@ -75,48 +93,71 @@ export function useWhatsAppMessages(
   }, [jid, limit, sessionId]);
 
   const loadOlder = useCallback(async () => {
-    if (!sessionId || !jid || loadingOlder || inFlightRef.current || olderInFlightRef.current || !hasMore) return [];
+    const requestGeneration = generationRef.current;
+    const requestSessionId = sessionId;
+    const requestJid = jid;
     const oldest = messagesRef.current[0];
-    if (!oldest) return [];
-    olderInFlightRef.current = true;
-    setLoadingOlder(true);
-    try {
-      setError(null);
-      const older = await messageService.history({ data: { sessionId, jid, before: String(oldest.messageTimestamp), limit } });
+
+    if (
+      !requestSessionId ||
+      !requestJid ||
+      !oldest ||
+      loadingOlder ||
+      !hasMore
+    ) return [];
+
+    if (mountedRef.current && requestGeneration === generationRef.current) setLoadingOlder(true);
+
+    const run = async () => {
+      const older = await messageService.history({
+        data: {
+          sessionId: requestSessionId,
+          jid: requestJid,
+          before: String(oldest.messageTimestamp),
+          limit,
+        },
+      });
+
+      if (!mountedRef.current || requestGeneration !== generationRef.current) return older;
+
       const merged = mergeMessages(older, messagesRef.current);
       messagesRef.current = merged;
-      if (mountedRef.current) {
-        setMessages(merged);
-        setHasMore(older.length >= limit);
-      }
+      setMessages(merged);
+      setHasMore(older.length >= limit);
+      setError(null);
       return older;
+    };
+
+    const queued = queueRef.current.then(run, run);
+    queueRef.current = queued.then(() => undefined, () => undefined);
+
+    try {
+      return await queued;
     } catch (value) {
       const message = value instanceof Error ? value.message : "Could not load older WhatsApp messages.";
-      if (mountedRef.current) setError(message);
+      if (mountedRef.current && requestGeneration === generationRef.current) setError(message);
       throw value;
     } finally {
-      olderInFlightRef.current = false;
-      if (mountedRef.current) setLoadingOlder(false);
+      if (mountedRef.current && requestGeneration === generationRef.current) setLoadingOlder(false);
     }
   }, [hasMore, jid, limit, loadingOlder, sessionId]);
 
   useEffect(() => {
     mountedRef.current = true;
     generationRef.current += 1;
-    const generation = generationRef.current;
-    inFlightRef.current = false;
-    olderInFlightRef.current = false;
     initializedRef.current = false;
     messagesRef.current = [];
+
     setMessages([]);
     setHasMore(true);
     setError(null);
-    if (!sessionId || !jid) {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingOlder(false);
-      return;
-    }
+    setLoading(false);
+    setRefreshing(false);
+    setLoadingOlder(false);
+
+    const generation = generationRef.current;
+    if (!sessionId || !jid) return;
+
     setLoading(true);
     void refresh().catch(() => undefined);
 
@@ -124,20 +165,42 @@ export function useWhatsAppMessages(
     const schedule = () => {
       timer = window.setTimeout(async () => {
         if (!mountedRef.current || generation !== generationRef.current) return;
-        try { await refresh(); } catch { /* state already contains the error */ }
+        try {
+          await refresh();
+        } catch {
+          // Error already exposed through hook state.
+        }
         if (mountedRef.current && generation === generationRef.current) schedule();
       }, pollMs);
     };
     schedule();
 
     return () => {
-      mountedRef.current = false;
-      generationRef.current += 1;
       if (timer) window.clearTimeout(timer);
+      // Do not cancel or reset queueRef here. An old request may still be
+      // running; generation checks prevent it from mutating the new chat.
+      mountedRef.current = false;
     };
   }, [jid, pollMs, refresh, sessionId]);
 
-  const state: WhatsAppMessageLoadState = loadingOlder ? "loadingOlder" : loading ? "loading" : refreshing ? "refreshing" : error ? "error" : messages.length ? "ready" : "idle";
+  const state: WhatsAppMessageLoadState =
+    loadingOlder ? "loadingOlder" :
+    loading ? "loading" :
+    refreshing ? "refreshing" :
+    error ? "error" :
+    messages.length ? "ready" :
+    "idle";
 
-  return { messages, setMessages, loading, loadingOlder, refreshing, hasMore, error, state, refresh, loadOlder };
+  return {
+    messages,
+    setMessages,
+    loading,
+    loadingOlder,
+    refreshing,
+    hasMore,
+    error,
+    state,
+    refresh,
+    loadOlder,
+  };
 }
