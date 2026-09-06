@@ -17,6 +17,7 @@ const SessionId = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const Jid = z.string().min(1).max(200);
 const Pagination = z.object({ before: z.string().optional(), limit: z.number().int().min(1).max(200).optional() });
 const SendText = z.object({ sessionId: SessionId, jid: Jid, text: z.string().trim().min(1).max(4096), quotedMessageId: z.string().optional() });
+const ContactInput = z.object({ sessionId: SessionId, jid: Jid, displayName: z.string().trim().min(1).max(200), vcard: z.string().min(1).max(10000), quotedMessageId: z.string().optional() });
 const ChatAction = z.object({ sessionId: SessionId, jid: Jid, action: z.enum(["archive", "pin", "mute", "markRead", "markUnread"]), value: z.union([z.boolean(), z.number(), z.null()]).optional() });
 const ReadInput = z.object({ sessionId: SessionId, jid: Jid, messageIds: z.array(z.string().min(1)).min(1).max(100) });
 const MessageAction = z.object({ sessionId: SessionId, jid: Jid, messageId: z.string().min(1).max(200) });
@@ -56,26 +57,20 @@ export const listWhatsAppSessions = createServerFn({ method: "POST" }).handler(a
 
 export const getWhatsAppRealtimeToken = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionIds: z.array(SessionId).min(1).max(100) }).parse(value))
-  .handler(async ({ data }) => {
-    const token = (await request<ApiEnvelope<{ token: string }>>("/api/sessions/realtime-token", {
-      method: "POST",
-      body: JSON.stringify({ sessionIds: data.sessionIds }),
-    })).data.token;
-    return { token, url: backendUrl() };
-  });
+  .handler(async ({ data }) => ({
+    token: (await request<ApiEnvelope<{ token: string }>>("/api/sessions/realtime-token", { method: "POST", body: JSON.stringify({ sessionIds: data.sessionIds }) })).data.token,
+    url: backendUrl(),
+  }));
 
 export const startWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(({ data }) => request<{ success: boolean; message?: string }>(`/api/sessions/${encodeURIComponent(data.sessionId)}/start`, { method: "POST" }));
-
 export const getWhatsAppSessionStatus = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(async ({ data }) => (await request<ApiEnvelope<WhatsAppSession>>(`/api/sessions/${encodeURIComponent(data.sessionId)}/status`)).data);
-
 export const logoutWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(({ data }) => request<{ success: boolean; message?: string }>(`/api/sessions/${encodeURIComponent(data.sessionId)}/logout`, { method: "POST" }));
-
 export const deleteWhatsAppSession = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(({ data }) => request<{ success: boolean; message?: string }>(`/api/sessions/${encodeURIComponent(data.sessionId)}`, { method: "DELETE" }));
@@ -83,11 +78,9 @@ export const deleteWhatsAppSession = createServerFn({ method: "POST" })
 export const listWhatsAppChats = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId }).parse(value))
   .handler(async ({ data }) => (await request<ApiEnvelope<WhatsAppChat[]>>(`/api/chats/${encodeURIComponent(data.sessionId)}`)).data);
-
 export const getWhatsAppChat = createServerFn({ method: "POST" })
   .validator((value: unknown) => z.object({ sessionId: SessionId, jid: Jid }).parse(value))
   .handler(async ({ data }) => (await request<ApiEnvelope<WhatsAppChat>>(`/api/chats/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}`)).data);
-
 export const updateWhatsAppChat = createServerFn({ method: "POST" })
   .validator((value: unknown) => ChatAction.parse(value))
   .handler(({ data }) => request<{ success: boolean }>(`/api/chats/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}`, { method: "PATCH", body: JSON.stringify({ action: data.action, value: data.value }) }));
@@ -98,29 +91,59 @@ export const getWhatsAppHistory = createServerFn({ method: "POST" })
     const params = new URLSearchParams();
     if (data.before) params.set("before", data.before);
     if (data.limit) params.set("limit", String(data.limit));
-    const response = await request<ApiEnvelope<WhatsAppMessage[]>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/history${params.toString() ? `?${params}` : ""}`);
-    return response.data;
+    return (await request<ApiEnvelope<WhatsAppMessage[]>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/history${params.toString() ? `?${params}` : ""}`)).data;
   });
 
 export const sendWhatsAppMessage = createServerFn({ method: "POST" })
   .validator((value: unknown) => SendText.parse(value))
-  .handler(({ data }) => {
-    const payload: WhatsAppMessageInput = { type: "text", text: data.text, ...(data.quotedMessageId ? { quotedMessageId: data.quotedMessageId } : {}) };
-    return request<ApiEnvelope<unknown>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/send`, { method: "POST", body: JSON.stringify(payload) });
+  .handler(({ data }) => request<ApiEnvelope<unknown>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/send`, { method: "POST", body: JSON.stringify({ type: "text", text: data.text, ...(data.quotedMessageId ? { quotedMessageId: data.quotedMessageId } : {}) }) }));
+
+/** Multipart send. FormData is kept server-side so the permanent backend API key never reaches the browser. */
+export const sendWhatsAppMedia = createServerFn({ method: "POST" })
+  .validator((value: unknown) => {
+    if (!(value instanceof FormData)) throw new Error("Expected multipart FormData");
+    return value;
+  })
+  .handler(async ({ data }) => {
+    const root = backendUrl();
+    if (!root) throw new WhatsAppApiError("WhatsApp backend is not configured. Set WHATSAPP_BACKEND_URL in Vercel.", 500);
+    const sessionId = String(data.get("sessionId") || "");
+    const jid = String(data.get("jid") || "");
+    SessionId.parse(sessionId); Jid.parse(jid);
+    const file = data.get("file");
+    if (!(file instanceof File)) throw new WhatsAppApiError("A media file is required.", 400);
+    const type = String(data.get("type") || "");
+    if (!["image", "video", "sticker"].includes(type)) throw new WhatsAppApiError("Unsupported media type.", 400);
+    const form = new FormData();
+    form.set("file", file, file.name || "upload");
+    form.set("type", type);
+    if (data.get("caption")) form.set("caption", String(data.get("caption")));
+    if (file.type) form.set("mimetype", file.type);
+    if (data.get("fileName")) form.set("fileName", String(data.get("fileName")));
+    const response = await fetch(`${root}/api/messages/${encodeURIComponent(sessionId)}/${encodeURIComponent(jid)}/send`, {
+      method: "POST",
+      headers: backendKey() ? { authorization: `Bearer ${backendKey()}` } : undefined,
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new WhatsAppApiError(body?.error || body?.message || `WhatsApp backend returned HTTP ${response.status}`, response.status, body);
+    return body as ApiEnvelope<unknown>;
   });
+
+export const sendWhatsAppContact = createServerFn({ method: "POST" })
+  .validator((value: unknown) => ContactInput.parse(value))
+  .handler(({ data }) => request<ApiEnvelope<unknown>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/send`, { method: "POST", body: JSON.stringify({ type: "contact", displayName: data.displayName, vcard: data.vcard, ...(data.quotedMessageId ? { quotedMessageId: data.quotedMessageId } : {}) }) }));
 
 export const markWhatsAppMessagesRead = createServerFn({ method: "POST" })
   .validator((value: unknown) => ReadInput.parse(value))
   .handler(({ data }) => request<{ success: boolean }>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/read`, { method: "POST", body: JSON.stringify({ messageIds: data.messageIds }) }));
-
 export const editWhatsAppMessage = createServerFn({ method: "POST" })
   .validator((value: unknown) => MessageAction.extend({ text: z.string().trim().min(1).max(4096) }).parse(value))
   .handler(({ data }) => request<ApiEnvelope<WhatsAppMessage>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/${encodeURIComponent(data.messageId)}`, { method: "PATCH", body: JSON.stringify({ text: data.text }) }));
-
 export const deleteWhatsAppMessage = createServerFn({ method: "POST" })
   .validator((value: unknown) => MessageAction.parse(value))
   .handler(({ data }) => request<ApiEnvelope<WhatsAppMessage>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/${encodeURIComponent(data.messageId)}`, { method: "DELETE" }));
-
 export const reactToWhatsAppMessage = createServerFn({ method: "POST" })
   .validator((value: unknown) => MessageReaction.parse(value))
   .handler(({ data }) => request<ApiEnvelope<WhatsAppMessage>>(`/api/messages/${encodeURIComponent(data.sessionId)}/${encodeURIComponent(data.jid)}/${encodeURIComponent(data.messageId)}/react`, { method: "POST", body: JSON.stringify({ emoji: data.emoji }) }));
