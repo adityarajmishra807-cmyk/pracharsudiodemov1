@@ -47,15 +47,20 @@ export function WhatsAppChatThread({
   const [emoji, setEmoji] = useState("👍");
   const messagesRef = useRef<HTMLDivElement>(null);
   const markedReadRef = useRef(new Set<string>());
-  const previousMessageCountRef = useRef(0);
-  const hasInitializedScrollRef = useRef(false);
+  const previousMessageIdsRef = useRef<string[]>([]);
+  const loadingOlderRef = useRef(false);
+  const shouldStickToBottomRef = useRef(true);
 
   const ordered = useMemo(() => sortMessages(messages), [messages]);
 
   useEffect(() => {
+    loadingOlderRef.current = loadingOlder;
+  }, [loadingOlder]);
+
+  useEffect(() => {
     markedReadRef.current.clear();
-    previousMessageCountRef.current = 0;
-    hasInitializedScrollRef.current = false;
+    previousMessageIdsRef.current = [];
+    shouldStickToBottomRef.current = true;
   }, [chat?.jid, sessionId]);
 
   useEffect(() => {
@@ -74,45 +79,58 @@ export function WhatsAppChatThread({
   useEffect(() => {
     const element = messagesRef.current;
     if (!element || ordered.length === 0) return;
-    if (!hasInitializedScrollRef.current) {
+
+    const nextIds = ordered.map((message) => message.messageId);
+    const previousIds = previousMessageIdsRef.current;
+
+    if (previousIds.length === 0) {
       element.scrollTop = element.scrollHeight;
-      hasInitializedScrollRef.current = true;
-      previousMessageCountRef.current = ordered.length;
+      previousMessageIdsRef.current = nextIds;
       return;
     }
 
-    const previousCount = previousMessageCountRef.current;
+    const sameOldTail = nextIds[nextIds.length - 1] === previousIds[previousIds.length - 1];
+    const prepended = nextIds.length > previousIds.length && sameOldTail;
     const nearBottom = element.scrollHeight - element.clientHeight - element.scrollTop < 160;
-    if (ordered.length > previousCount && nearBottom) element.scrollTop = element.scrollHeight;
-    previousMessageCountRef.current = ordered.length;
-  }, [ordered.length]);
+    const appended = nextIds.length > previousIds.length && !prepended;
 
-  if (!chat) {
-    return <div className="flex flex-1 items-center justify-center p-8 text-center"><p className="text-sm text-muted-foreground">Select a conversation.</p></div>;
-  }
+    if (prepended) {
+      // Older history was inserted above the viewport. Keep the same message under the user's eyes.
+      const previousHeight = Number(element.dataset.scrollHeight || 0);
+      if (previousHeight > 0) element.scrollTop += element.scrollHeight - previousHeight;
+    } else if (appended && nearBottom) {
+      element.scrollTop = element.scrollHeight;
+    }
+
+    previousMessageIdsRef.current = nextIds;
+    element.dataset.scrollHeight = String(element.scrollHeight);
+  }, [ordered]);
 
   const loadOlder = async () => {
     const element = messagesRef.current;
-    if (!element || loadingOlder || !hasMore) return;
-    const previousHeight = element.scrollHeight;
-    const previousTop = element.scrollTop;
+    if (!element || loadingOlderRef.current || !hasMore || ordered.length === 0) return;
+    loadingOlderRef.current = true;
+    element.dataset.scrollHeight = String(element.scrollHeight);
     try {
       await onLoadOlder();
-      requestAnimationFrame(() => {
-        const current = messagesRef.current;
-        if (!current) return;
-        current.scrollTop = current.scrollHeight - previousHeight + previousTop;
-      });
     } catch {
-      // Hook surfaces the error in the inbox.
+      // Hook exposes the error in the inbox.
+    } finally {
+      loadingOlderRef.current = false;
     }
   };
 
   const handleScroll = () => {
     const element = messagesRef.current;
-    if (!element || loadingOlder || !hasMore) return;
+    if (!element) return;
+    shouldStickToBottomRef.current = element.scrollHeight - element.clientHeight - element.scrollTop < 160;
+    if (loadingOlderRef.current || !hasMore) return;
     if (element.scrollTop <= 120) void loadOlder();
   };
+
+  if (!chat) {
+    return <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center"><p className="text-sm text-muted-foreground">Select a conversation.</p></div>;
+  }
 
   const send = async () => {
     const text = draft.trim();
@@ -121,6 +139,7 @@ export function WhatsAppChatThread({
     try {
       await messageService.sendText({ data: { sessionId, jid: chat.jid, text } });
       setDraft("");
+      shouldStickToBottomRef.current = true;
       await onRefresh();
     } catch (value) {
       toast.error(value instanceof Error ? value.message : "Could not send message.");
@@ -148,15 +167,15 @@ export function WhatsAppChatThread({
   };
 
   return (
-    <section className="flex min-h-[70svh] flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onBack} aria-label="Back to chats"><ArrowLeft className="size-4" /></Button>
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white">{titleFor(chat).slice(0, 1).toUpperCase()}</div>
         <div className="min-w-0 flex-1"><p className="truncate font-semibold text-navy">{titleFor(chat)}</p><p className="truncate text-xs text-muted-foreground">{chat.isGroup ? "Group" : chat.jid.split("@")[0]}</p></div>
         {refreshing ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Refreshing messages" /> : null}
       </header>
 
-      <div ref={messagesRef} onScroll={handleScroll} className="flex-1 overflow-y-auto bg-surface p-4 space-y-2">
+      <div ref={messagesRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-surface p-4 space-y-2">
         {loadingOlder ? <div className="sticky top-0 z-10 mx-auto w-fit rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm"><Loader2 className="mr-1.5 inline size-3 animate-spin" />Loading older messages…</div> : null}
         {!hasMore && ordered.length > 0 ? <div className="mx-auto mb-3 w-fit rounded-full px-3 py-1 text-[11px] text-muted-foreground">Beginning of conversation</div> : null}
         {loading && ordered.length === 0 ? <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 size-4 animate-spin" />Loading messages…</div> : null}
@@ -164,8 +183,8 @@ export function WhatsAppChatThread({
         {ordered.map((message) => {
           const normalized = toInboxMessage(message);
           return (
-            <div key={message.messageId} className={`group flex ${message.fromMe ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm shadow-sm ${message.fromMe ? "rounded-br-md bg-navy text-white" : "rounded-bl-md border border-border bg-card text-foreground"}`}>
+            <div key={message.messageId} className={`group flex w-full ${message.fromMe ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[min(82%,42rem)] rounded-2xl px-3 py-2 text-sm shadow-sm ${message.fromMe ? "rounded-br-md bg-navy text-white" : "rounded-bl-md border border-border bg-card text-foreground"}`}>
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1"><p className="whitespace-pre-wrap break-words">{normalized.text}</p><div className={`mt-1 flex items-center gap-1 text-[10px] ${message.fromMe ? "text-white/60" : "text-muted-foreground"}`}><span>{timeFor(message)}</span>{message.fromMe ? <CheckCheck className="size-3" /> : null}</div></div>
                   <DropdownMenu>
@@ -182,11 +201,11 @@ export function WhatsAppChatThread({
         })}
       </div>
 
-      <div className="border-t border-border bg-card p-3">
+      <div className="shrink-0 border-t border-border bg-card p-3">
         <div className="mb-2 flex justify-end gap-1">
           {["👍", "❤️", "😂", "😮", "😢"].map((item) => <button key={item} type="button" onClick={() => setEmoji(item)} className={`rounded-md px-2 py-1 text-sm hover:bg-surface ${emoji === item ? "bg-surface" : ""}`}>{item}</button>)}
         </div>
-        <div className="flex items-center gap-2"><Input value={draft} onChange={(event) => setDraft(event.target.value)} disabled={sending} placeholder="Type a WhatsApp message…" className="h-11" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button className="h-11 shrink-0 px-4" onClick={() => void send()} disabled={sending || !draft.trim()}><Send className="mr-2 size-4" />{sending ? "Sending…" : "Send"}</Button></div>
+        <div className="flex items-center gap-2"><Input value={draft} onChange={(event) => setDraft(event.target.value)} disabled={sending} placeholder="Type a WhatsApp message…" className="h-11 min-w-0" onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} /><Button className="h-11 shrink-0 px-4" onClick={() => void send()} disabled={sending || !draft.trim()}><Send className="mr-2 size-4" />{sending ? "Sending…" : "Send"}</Button></div>
       </div>
     </section>
   );
