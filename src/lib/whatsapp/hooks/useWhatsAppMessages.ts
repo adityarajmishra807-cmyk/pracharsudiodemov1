@@ -14,47 +14,64 @@ export function useWhatsAppMessages(
   jid: string | null,
   options: { pollMs?: number; limit?: number } = {},
 ) {
-  const pollMs = options.pollMs ?? 2500;
-  const limit = options.limit ?? 100;
+  const pollMs = options.pollMs ?? 5000;
+  const limit = Math.min(Math.max(options.limit ?? 100, 20), 100);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const olderInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
   const initializedRef = useRef(false);
+  const messagesRef = useRef<WhatsAppMessage[]>([]);
 
   const refresh = useCallback(async () => {
     if (!sessionId || !jid) {
+      messagesRef.current = [];
       setMessages([]);
       setHasMore(false);
       setLoading(false);
+      setRefreshing(false);
       return [];
     }
-
-    setLoading(true);
+    if (inFlightRef.current || olderInFlightRef.current) return messagesRef.current;
+    inFlightRef.current = true;
+    setRefreshing(true);
     try {
       setError(null);
       const latest = await messageService.history({ data: { sessionId, jid, limit } });
-      setMessages((current) => mergeMessages(current, latest));
-      if (!initializedRef.current) {
-        setHasMore(latest.length >= limit);
-        initializedRef.current = true;
+      const merged = mergeMessages(messagesRef.current, latest);
+      messagesRef.current = merged;
+      if (mountedRef.current) {
+        setMessages(merged);
+        if (!initializedRef.current) {
+          setHasMore(latest.length >= limit);
+          initializedRef.current = true;
+        }
       }
       return latest;
     } catch (value) {
       const message = value instanceof Error ? value.message : "Could not load WhatsApp messages.";
-      setError(message);
+      if (mountedRef.current) setError(message);
       throw value;
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [jid, limit, sessionId]);
 
   const loadOlder = useCallback(async () => {
-    if (!sessionId || !jid || loadingOlder || !hasMore || messages.length === 0) return [];
-    const oldest = messages[0];
+    if (!sessionId || !jid || loadingOlder || inFlightRef.current || olderInFlightRef.current || !hasMore) return [];
+    const oldest = messagesRef.current[0];
     if (!oldest) return [];
 
+    olderInFlightRef.current = true;
     setLoadingOlder(true);
     try {
       setError(null);
@@ -66,27 +83,49 @@ export function useWhatsAppMessages(
           limit,
         },
       });
-      setMessages((current) => mergeMessages(older, current));
-      setHasMore(older.length >= limit);
+      const merged = mergeMessages(older, messagesRef.current);
+      messagesRef.current = merged;
+      if (mountedRef.current) {
+        setMessages(merged);
+        setHasMore(older.length >= limit);
+      }
       return older;
     } catch (value) {
       const message = value instanceof Error ? value.message : "Could not load older WhatsApp messages.";
-      setError(message);
+      if (mountedRef.current) setError(message);
       throw value;
     } finally {
-      setLoadingOlder(false);
+      olderInFlightRef.current = false;
+      if (mountedRef.current) setLoadingOlder(false);
     }
-  }, [hasMore, jid, limit, loadingOlder, messages, sessionId]);
+  }, [hasMore, jid, limit, loadingOlder, sessionId]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    inFlightRef.current = false;
+    olderInFlightRef.current = false;
+    initializedRef.current = false;
+    messagesRef.current = [];
     setMessages([]);
     setHasMore(true);
     setError(null);
-    initializedRef.current = false;
     void refresh().catch(() => undefined);
     if (!sessionId || !jid) return;
-    const timer = window.setInterval(() => void refresh().catch(() => undefined), pollMs);
-    return () => window.clearInterval(timer);
+
+    let timer: number | undefined;
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (!mountedRef.current) return;
+        try { await refresh(); } catch { /* surfaced through hook state */ }
+        if (mountedRef.current) schedule();
+      }, pollMs);
+    };
+    schedule();
+
+    return () => {
+      mountedRef.current = false;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [jid, pollMs, refresh, sessionId]);
 
   return {
@@ -94,6 +133,7 @@ export function useWhatsAppMessages(
     setMessages,
     loading,
     loadingOlder,
+    refreshing,
     hasMore,
     error,
     refresh,
