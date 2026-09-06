@@ -7,3 +7,4 @@ export * from "./hooks/useWhatsAppMessages";
 export { sessionService } from "./services/session.service";
 export { chatService } from "./services/chat.service";
 export { messageService } from "./services/message.service";
+export { realtimeService } from "./services/realtime.service";
