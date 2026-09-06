@@ -21,6 +21,8 @@ export type WhatsAppSession = {
 export type WhatsAppChat = {
   sessionId: string;
   jid: string;
+  /** Resolved real phone number when WhatsApp exposes the LID → PN mapping. */
+  phoneNumber?: string | null;
   name: string;
   unreadCount: number;
   conversationTimestamp: number;
@@ -65,29 +67,9 @@ export type ApiEnvelope<T> = {
 };
 
 export type WhatsAppMessageInput =
-  | {
-      type: "text";
-      text: string;
-      quotedMessageId?: string;
-      contextInfo?: Record<string, unknown>;
-    }
-  | {
-      type: "image" | "video" | "sticker";
-      caption?: string;
-      mimetype?: string;
-      fileName?: string;
-      url?: string;
-      quotedMessageId?: string;
-      contextInfo?: Record<string, unknown>;
-      gifPlayback?: boolean;
-    }
-  | {
-      type: "contact";
-      displayName: string;
-      vcard: string;
-      quotedMessageId?: string;
-      contextInfo?: Record<string, unknown>;
-    };
+  | { type: "text"; text: string; quotedMessageId?: string; contextInfo?: Record<string, unknown> }
+  | { type: "image" | "video" | "sticker"; caption?: string; mimetype?: string; fileName?: string; url?: string; quotedMessageId?: string; contextInfo?: Record<string, unknown>; gifPlayback?: boolean }
+  | { type: "contact"; displayName: string; vcard: string; quotedMessageId?: string; contextInfo?: Record<string, unknown> };
 
 export function jidToPhone(jid: string) {
   return jid.replace(/@.*$/, "");
@@ -108,18 +90,7 @@ export function extractMessageText(content: unknown): string {
     const value = message[key];
     if (typeof value === "string" && value) return value;
   }
-  const candidates = [
-    "extendedTextMessage",
-    "imageMessage",
-    "videoMessage",
-    "documentMessage",
-    "stickerMessage",
-    "contactMessage",
-    "contactsArrayMessage",
-    "buttonsResponseMessage",
-    "listResponseMessage",
-    "templateButtonReplyMessage",
-  ];
+  const candidates = ["extendedTextMessage", "imageMessage", "videoMessage", "documentMessage", "stickerMessage", "contactMessage", "contactsArrayMessage", "buttonsResponseMessage", "listResponseMessage", "templateButtonReplyMessage"];
   for (const key of candidates) {
     const nested = message[key];
     if (!nested || typeof nested !== "object") continue;
