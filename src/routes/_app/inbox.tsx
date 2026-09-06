@@ -22,22 +22,23 @@ export const Route = createFileRoute("/_app/inbox")({
 function InboxPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { sessions, loading: sessionsLoading, error: sessionsError, refresh: refreshSessions } = useWhatsAppSessions({ pollMs: 5000 });
+  const { sessions, loading: sessionsLoading, refreshing: sessionsRefreshing, error: sessionsError, refresh: refreshSessions } = useWhatsAppSessions({ pollMs: 8000 });
   const readySessions = useMemo(() => sessions.filter((session) => session.status === "open"), [sessions]);
   const accountId = readySessions.some((session) => session.sessionId === search.account) ? search.account! : readySessions[0]?.sessionId || "";
   const activeSession = readySessions.find((session) => session.sessionId === accountId) || null;
-  const { chats, loading: chatsLoading, error: chatsError, refresh: refreshChats } = useWhatsAppChats(activeSession?.sessionId || null, { pollMs: 4000 });
+  const { chats, loading: chatsLoading, refreshing: chatsRefreshing, error: chatsError, refresh: refreshChats } = useWhatsAppChats(activeSession?.sessionId || null, { pollMs: 7000 });
   const activeJid = chats.some((chat) => chat.jid === search.chat) ? search.chat! : chats[0]?.jid || null;
   const activeChat = chats.find((chat) => chat.jid === activeJid) || null;
   const {
     messages,
     loading: messagesLoading,
     loadingOlder: messagesLoadingOlder,
+    refreshing: messagesRefreshing,
     hasMore: messagesHasMore,
     error: messagesError,
     refresh: refreshMessages,
     loadOlder: loadOlderMessages,
-  } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 2500, limit: 100 });
+  } = useWhatsAppMessages(activeSession?.sessionId || null, activeJid, { pollMs: 6000, limit: 100 });
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +63,8 @@ function InboxPage() {
   }, [refreshChats, refreshMessages, refreshSessions]);
 
   const error = pageError || sessionsError || chatsError || messagesError;
+  const inboxRefreshing = sessionsRefreshing || chatsRefreshing || messagesRefreshing;
+  const inboxLoading = sessionsLoading || chatsLoading || messagesLoading;
 
   if (sessionsLoading && sessions.length === 0) {
     return <div className="space-y-5"><PageHeader title="WhatsApp Inbox" /><EmptyState icon={RefreshCw} title="Loading WhatsApp accounts" description="Connecting to the WhatsApp backend…" /></div>;
@@ -80,7 +83,7 @@ function InboxPage() {
       <PageHeader
         title="WhatsApp Inbox"
         description="Live conversations from your connected WhatsApp accounts."
-        actions={<div className="flex w-full items-center gap-2 sm:w-auto"><WhatsAppAccountSelect sessions={readySessions} value={accountId} onChange={(value) => void navigate({ search: { account: value, chat: undefined } })} /><Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={sessionsLoading || chatsLoading || messagesLoading} aria-label="Refresh inbox"><RefreshCw className={(sessionsLoading || chatsLoading || messagesLoading) ? "size-4 animate-spin" : "size-4"} /></Button></div>}
+        actions={<div className="flex w-full items-center gap-2 sm:w-auto"><WhatsAppAccountSelect sessions={readySessions} value={accountId} onChange={(value) => void navigate({ search: { account: value, chat: undefined } })} /><Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={inboxRefreshing} aria-label="Refresh inbox"><RefreshCw className={inboxRefreshing ? "size-4 animate-spin" : "size-4"} /></Button></div>}
       />
 
       {error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive break-words">{error}</div> : null}
@@ -97,6 +100,7 @@ function InboxPage() {
             loading={messagesLoading}
             loadingOlder={messagesLoadingOlder}
             hasMore={messagesHasMore}
+            refreshing={messagesRefreshing}
             onBack={() => void navigate({ search: { account: accountId, chat: undefined } })}
             onRefresh={refreshMessages}
             onLoadOlder={loadOlderMessages}
