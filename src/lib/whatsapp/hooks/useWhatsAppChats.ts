@@ -6,7 +6,7 @@ import type { WhatsAppChat } from "../core/types";
 
 export type WhatsAppChatLoadState = "idle" | "loading" | "ready" | "error";
 
-export function useWhatsAppChats(sessionId: string | null) {
+export function useWhatsAppChats(sessionId: string | null, _options: { pollMs?: number } = {}) {
   const [chats, setChats] = useState<WhatsAppChat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,6 @@ export function useWhatsAppChats(sessionId: string | null) {
   useEffect(() => {
     mountedRef.current = true;
     generationRef.current += 1;
-    const generation = generationRef.current;
     chatsRef.current = [];
     setChats([]);
     setError(null);
@@ -64,8 +63,7 @@ export function useWhatsAppChats(sessionId: string | null) {
           if (!jid) continue;
           const current = map.get(jid);
           map.set(jid, {
-            sessionId,
-            jid,
+            sessionId, jid,
             name: typeof raw.name === "string" ? raw.name : current?.name || "",
             unreadCount: Number(raw.unreadCount ?? current?.unreadCount ?? 0),
             conversationTimestamp: Number(raw.conversationTimestamp ?? current?.conversationTimestamp ?? 0),
@@ -74,7 +72,7 @@ export function useWhatsAppChats(sessionId: string | null) {
             muteEndTime: Number(raw.muteEndTime ?? current?.muteEndTime ?? 0),
             isGroup: typeof raw.id === "string" ? raw.id.endsWith("@g.us") : current?.isGroup || false,
             lastMessageId: typeof raw.lastMessageId === "string" ? raw.lastMessageId : current?.lastMessageId || null,
-            raw: raw,
+            raw,
             createdAt: current?.createdAt || null,
             updatedAt: current?.updatedAt || null,
           });
@@ -87,9 +85,8 @@ export function useWhatsAppChats(sessionId: string | null) {
         const map = new Map(chatsRef.current.map((chat) => [chat.jid, chat]));
         for (const raw of updates) {
           const jid = typeof raw.id === "string" ? raw.id : "";
-          if (!jid) continue;
           const current = map.get(jid);
-          if (!current) continue;
+          if (!jid || !current) continue;
           map.set(jid, {
             ...current,
             ...(raw.name !== undefined ? { name: String(raw.name) } : {}),
@@ -115,12 +112,9 @@ export function useWhatsAppChats(sessionId: string | null) {
           const key = message.key && typeof message.key === "object" ? message.key as Record<string, unknown> : {};
           const jid = typeof key.remoteJid === "string" ? key.remoteJid : "";
           const id = typeof key.id === "string" ? key.id : "";
-          if (!jid || !id) continue;
-          const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
-          const current = map.get(jid);
-          if (current) {
-            map.set(jid, { ...current, lastMessageId: id, conversationTimestamp: Math.max(current.conversationTimestamp || 0, timestamp) });
-          }
+          if (!jid || !id || !map.has(jid)) continue;
+          const current = map.get(jid)!;
+          map.set(jid, { ...current, lastMessageId: id, conversationTimestamp: Math.max(current.conversationTimestamp || 0, Number(message.messageTimestamp || 0)) });
         }
         apply(Array.from(map.values()));
       }),
