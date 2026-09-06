@@ -6,7 +6,7 @@ import type { WhatsAppSession } from "../core/types";
 
 export type WhatsAppSessionLoadState = "idle" | "loading" | "ready" | "error";
 
-export function useWhatsAppSessions() {
+export function useWhatsAppSessions(_options: { pollMs?: number } = {}) {
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,15 +44,14 @@ export function useWhatsAppSessions() {
       realtimeService.subscribe("qr", (payload) => {
         const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
         if (!sessionId) return;
-        const next = sessionsRef.current.map((s) => s.sessionId === sessionId ? { ...s, status: "qr", qr: typeof payload.qr === "string" ? payload.qr : null } : s);
-        applySessions(next);
+        applySessions(sessionsRef.current.map((session) => session.sessionId === sessionId ? { ...session, status: "qr", qr: typeof payload.qr === "string" ? payload.qr : null } : session));
       }),
       realtimeService.subscribe("connection.update", (payload) => {
         const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
         const status = typeof payload.status === "string" ? payload.status : "";
         if (!sessionId || status === "socket_connected" || status === "socket_disconnected") return;
         const me = payload.me && typeof payload.me === "object" ? payload.me as WhatsAppSession["me"] : undefined;
-        applySessions(sessionsRef.current.map((s) => s.sessionId === sessionId ? { ...s, status, ...(me ? { me } : {}), ...(status === "open" ? { qr: null, lastConnectedAt: new Date().toISOString() } : {}) } : s));
+        applySessions(sessionsRef.current.map((session) => session.sessionId === sessionId ? { ...session, status, ...(me ? { me } : {}), ...(status === "open" ? { qr: null, lastConnectedAt: new Date().toISOString() } : {}) } : session));
       }),
     ];
     void refresh().catch(() => undefined);
