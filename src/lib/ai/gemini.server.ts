@@ -80,12 +80,12 @@ const TOOLS = [
           properties: {
             name: { type: "string" },
             status: { type: "string", enum: ["draft", "scheduled", "running", "completed"] },
-            templateId: { type: ["string", "null"] },
+            templateId: { type: "string", nullable: true },
             audienceStatus: {
               type: "string",
               enum: ["all", "new", "contacted", "qualified", "won", "lost"],
             },
-            audienceTag: { type: ["string", "null"] },
+            audienceTag: { type: "string", nullable: true },
           },
           required: ["name"],
         },
@@ -93,7 +93,7 @@ const TOOLS = [
       {
         name: "create_automation",
         description:
-          "Create a new draft automation shell when the user asks to create an automation. The application will ask for approval before saving.",
+          "Create a new draft automation shell when the user asks to create an automation. The application will ask the user to review and approve it before saving.",
         parameters: {
           type: "object",
           properties: { name: { type: "string" } },
