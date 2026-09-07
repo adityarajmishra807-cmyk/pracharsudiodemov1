@@ -109,7 +109,7 @@ function ActionCard({
             <div><span className="font-medium">Category:</span> {action.args.category}</div>
             <div>
               <span className="font-medium">Message:</span>
-              <div className="mt-1 rounded-lg border border-border bg-card p-2.5 whitespace-pre-wrap break-words text-xs leading-relaxed">
+              <div className="mt-1 rounded-lg border border-white/10 bg-navy/80 px-2.5 py-2.5 text-white/90 whitespace-pre-wrap break-words text-xs leading-relaxed shadow-inner">
                 {action.args.body}
               </div>
             </div>
