@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppAnalyticsRouteImport } from './routes/_app/analytics'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
@@ -25,6 +26,7 @@ import { Route as AppLeadsIndexRouteImport } from './routes/_app/leads/index'
 import { Route as AppLeadsLeadIdRouteImport } from './routes/_app/leads/$leadId'
 
 const IndexRoute = IndexRouteImport.update({ id: '/', path: '/', getParentRoute: () => rootRouteImport } as any)
+const TermsRoute = TermsRouteImport.update({ id: '/terms', path: '/terms', getParentRoute: () => rootRouteImport } as any)
 const AppRoute = AppRouteImport.update({ id: '/_app', getParentRoute: () => rootRouteImport } as any)
 const AppAnalyticsRoute = AppAnalyticsRouteImport.update({ id: '/analytics', path: '/analytics', getParentRoute: () => AppRoute } as any)
 const AppAutomationsRoute = AppAutomationsRouteImport.update({ id: '/automations', path: '/automations', getParentRoute: () => AppRoute } as any)
@@ -41,6 +43,7 @@ const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({ id: '/leads/$lead
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
   '/analytics': typeof AppAnalyticsRoute
   '/automations': typeof AppAutomationsRoute
   '/campaigns': typeof AppCampaignsRoute
@@ -57,6 +60,7 @@ export interface FileRoutesByFullPath {
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
   '/analytics': typeof AppAnalyticsRoute
   '/automations': typeof AppAutomationsRoute
   '/campaigns': typeof AppCampaignsRoute
@@ -74,6 +78,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
   '/_app': typeof AppRouteWithChildren
   '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/automations': typeof AppAutomationsRoute
@@ -93,6 +98,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/terms'
     | '/analytics'
     | '/automations'
     | '/campaigns'
@@ -108,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/terms'
     | '/analytics'
     | '/automations'
     | '/campaigns'
@@ -123,6 +130,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/terms'
     | '/_app'
     | '/_app/analytics'
     | '/_app/automations'
@@ -142,6 +150,7 @@ export interface FileRouteTypes {
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     '/': { id: '/'; path: '/'; fullPath: '/'; preLoaderRoute: typeof IndexRouteImport; parentRoute: typeof rootRouteImport }
+    '/terms': { id: '/terms'; path: '/terms'; fullPath: '/terms'; preLoaderRoute: typeof TermsRouteImport; parentRoute: typeof rootRouteImport }
     '/_app': { id: '/_app'; path: ''; fullPath: '/'; preLoaderRoute: typeof AppRouteImport; parentRoute: typeof rootRouteImport }
     '/_app/analytics': { id: '/_app/analytics'; path: '/analytics'; fullPath: '/analytics'; preLoaderRoute: typeof AppAnalyticsRouteImport; parentRoute: typeof AppRoute }
     '/_app/automations': { id: '/_app/automations'; path: '/automations'; fullPath: '/automations'; preLoaderRoute: typeof AppAutomationsRouteImport; parentRoute: typeof AppRoute }
@@ -192,6 +201,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren = {
   IndexRoute,
+  TermsRoute,
   AppRoute: AppRouteWithChildren,
 }
 
