@@ -63,15 +63,19 @@ type EvolutionInstance = {
     instanceName?: string;
     instanceId?: string;
     status?: string;
+    connectionStatus?: string;
     owner?: string;
     profileName?: string;
     profilePictureUrl?: string;
+    profilePicUrl?: string;
   };
   instanceName?: string;
   status?: string;
+  connectionStatus?: string;
   owner?: string;
   profileName?: string;
   profilePictureUrl?: string;
+  profilePicUrl?: string;
 };
 
 type EvolutionResponse = Record<string, unknown>;
@@ -128,12 +132,14 @@ function evolutionStatus(value: unknown): WhatsAppSession["status"] {
 function normalizeInstance(raw: EvolutionInstance): WhatsAppSession {
   const instance = raw.instance || raw;
   const sessionId = String(instance.instanceName || raw.instanceName || "");
-  const status = evolutionStatus(instance.status || raw.status);
+  // Evolution's fetchInstances response uses connectionStatus; some versions also expose status.
+  const status = evolutionStatus(instance.connectionStatus || instance.status || raw.connectionStatus || raw.status);
   const owner = instance.owner || raw.owner || null;
+  const cached = qrCache.get(sessionId);
   return {
     sessionId,
     status,
-    qr: qrCache.get(sessionId)?.expiresAt && qrCache.get(sessionId)!.expiresAt > Date.now() ? qrCache.get(sessionId)!.qr : null,
+    qr: cached && cached.expiresAt > Date.now() ? cached.qr : null,
     me: owner ? { id: String(owner), name: instance.profileName || raw.profileName || null } : null,
     createdAt: undefined,
     updatedAt: undefined,
@@ -196,13 +202,15 @@ export const getWhatsAppSessionStatus = createServerFn({ method: "POST" })
     const session: WhatsAppSession = {
       sessionId: data.sessionId,
       status: evolutionStatus(state),
-      qr: qrCache.get(data.sessionId)?.expiresAt && qrCache.get(data.sessionId)!.expiresAt > Date.now() ? qrCache.get(data.sessionId)!.qr : null,
+      qr: null,
       me: null,
     };
 
+    const cached = qrCache.get(data.sessionId);
+    if (cached && cached.expiresAt > Date.now()) session.qr = cached.qr;
+
     if (session.status !== "open") {
-      const cached = qrCache.get(data.sessionId);
-      if (!cached || cached.expiresAt <= Date.now()) {
+      if (!session.qr) {
         try {
           await evolutionConnect(data.sessionId);
           session.qr = qrCache.get(data.sessionId)?.qr || null;
@@ -211,7 +219,6 @@ export const getWhatsAppSessionStatus = createServerFn({ method: "POST" })
           // Connection-state polling should still return the real Evolution state.
         }
       } else {
-        session.qr = cached.qr;
         session.status = "qr";
       }
     } else {
