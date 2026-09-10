@@ -85,7 +85,6 @@ const qrCache = new Map<string, { qr: string; expiresAt: number }>();
 function requireEvolution() {
   const root = evolutionUrl();
   if (!root) throw new WhatsAppApiError("Evolution API is not configured. Set EVOLUTION_API_URL.", 500);
-  if (!evolutionKey()) throw new WhatsAppApiError("Evolution API key is not configured. Set EVOLUTION_API_KEY.", 500);
   return root;
 }
 
