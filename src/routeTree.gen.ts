@@ -15,6 +15,9 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
 import { Route as AppSessionsRouteImport } from './routes/_app/sessions'
+import { Route as AppInboxRouteImport } from './routes/_app/inbox'
+import { Route as AppSendRouteImport } from './routes/_app/send'
+import { Route as AppAudiencesRouteImport } from './routes/_app/audiences'
 import { Route as AppLeadsIndexRouteImport } from './routes/_app/leads/index'
 import { Route as AppLeadsLeadIdRouteImport } from './routes/_app/leads/$leadId'
 
@@ -30,6 +33,9 @@ const AppSettingsRoute = AppSettingsRouteImport.update({ id: '/settings', path: 
 const AppTeamRoute = AppTeamRouteImport.update({ id: '/team', path: '/team', getParentRoute: () => AppRoute } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({ id: '/templates', path: '/templates', getParentRoute: () => AppRoute } as any)
 const AppSessionsRoute = AppSessionsRouteImport.update({ id: '/sessions', path: '/sessions', getParentRoute: () => AppRoute } as any)
+const AppInboxRoute = AppInboxRouteImport.update({ id: '/inbox', path: '/inbox', getParentRoute: () => AppRoute } as any)
+const AppSendRoute = AppSendRouteImport.update({ id: '/send', path: '/send', getParentRoute: () => AppRoute } as any)
+const AppAudiencesRoute = AppAudiencesRouteImport.update({ id: '/audiences', path: '/audiences', getParentRoute: () => AppRoute } as any)
 const AppLeadsIndexRoute = AppLeadsIndexRouteImport.update({ id: '/leads/', path: '/leads/', getParentRoute: () => AppRoute } as any)
 const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({ id: '/leads/$leadId', path: '/leads/$leadId', getParentRoute: () => AppRoute } as any)
 
@@ -43,6 +49,9 @@ const AppRouteChildren = {
   AppTeamRoute,
   AppTemplatesRoute,
   AppSessionsRoute,
+  AppInboxRoute,
+  AppSendRoute,
+  AppAudiencesRoute,
   AppLeadsLeadIdRoute,
   AppLeadsIndexRoute,
 }
