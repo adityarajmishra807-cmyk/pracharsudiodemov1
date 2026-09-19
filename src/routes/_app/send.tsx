@@ -1,0 +1,10 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useSessions } from "@/hooks/use-sessions";
+import { sessionsApi } from "@/lib/sessions-api";
+export const Route=createFileRoute("/_app/send")({component:SendPage});
+function SendPage(){const{data:sessions=[]}=useSessions();const[instance,setInstance]=useState("");const[number,setNumber]=useState("");const[text,setText]=useState("");const[busy,setBusy]=useState(false);const[result,setResult]=useState("");const send=async()=>{setBusy(true);setResult("");try{await sessionsApi.sendText(instance,number,text);setResult("Message sent successfully.");setText("")}catch(e){setResult(e instanceof Error?e.message:"Message failed.")}finally{setBusy(false)}};return <div className="mx-auto max-w-2xl space-y-5"><div><p className="text-xs font-semibold tracking-wider text-primary">WHATSAPP</p><h1 className="text-2xl font-bold text-navy">Send Message</h1><p className="text-sm text-muted-foreground">Send a message through a connected Evolution instance.</p></div><div className="space-y-4 rounded-xl border border-border bg-white p-5"><select className="h-10 w-full rounded-md border px-3 text-sm" value={instance} onChange={e=>setInstance(e.target.value)}><option value="">Select instance</option>{sessions.map((s:any)=><option key={s.instanceName} value={s.instanceName}>{s.instanceName}</option>)}</select><Input placeholder="919999999999" value={number} onChange={e=>setNumber(e.target.value)}/><Textarea placeholder="Message" value={text} onChange={e=>setText(e.target.value)}/><Button disabled={busy||!instance||!number||!text.trim()} onClick={()=>void send()}><Send className="mr-2 size-4"/>{busy?"Sending…":"Send message"}</Button>{result&&<p className="text-sm text-muted-foreground">{result}</p>}</div></div>}
