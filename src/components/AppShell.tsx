@@ -1,5 +1,5 @@
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Bot, Building2, LayoutDashboard, LogOut, Megaphone, MessageCircle, MoreHorizontal, Settings, ShieldCheck, Smartphone, Users, FileText, UserRound } from "lucide-react";
+import { BarChart3, Bot, Building2, LayoutDashboard, LogOut, Megaphone, MessageCircle, MoreHorizontal, Send, ContactRound, Settings, ShieldCheck, Smartphone, Users, FileText, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PracharChatbot } from "@/components/ai/PracharChatbot";
 import { Logo } from "@/components/Logo";
@@ -15,6 +15,8 @@ const NAV: NavItem[] = [
   { to: "/templates", label: "Templates", icon: FileText, permission: ["templatesUse", "templatesManage"], primaryMobile: true },
   { to: "/sessions", label: "Sessions", icon: Smartphone, permission: "inboxReply" },
   { to: "/inbox", label: "Inbox", icon: MessageCircle, permission: "inboxReply" },
+  { to: "/send", label: "Send Message", icon: Send, permission: "inboxReply" },
+  { to: "/audiences", label: "Audiences", icon: ContactRound, permission: "campaigns" },
   { to: "/campaigns", label: "Campaigns", icon: Megaphone, permission: "campaigns" },
   { to: "/automations", label: "Automations", icon: Bot, permission: "automations" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, permission: "analytics" },
