@@ -371,6 +371,20 @@ function SendPage() {
             </div>
           </section>
 
+          {templates.length > 0 && (
+            <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Load saved template</label>
+                <Select value={selectedTemplate} onValueChange={(value) => void applyTemplate(value)}>
+                  <SelectTrigger><SelectValue placeholder="Select a saved template" /></SelectTrigger>
+                  <SelectContent>
+                    {templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name} · {template.type}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+          )}
+
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -654,19 +668,6 @@ function SendPage() {
                 <p className="mt-1 text-right text-[10px] text-muted-foreground">now</p>
               </div>
             </div>
-          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Load saved template</label>
-              <Select value={selectedTemplate} onValueChange={(value) => void applyTemplate(value)}>
-                <SelectTrigger><SelectValue placeholder="Select a saved template" /></SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name} · {template.type}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </section>
-
-
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h2 className="font-semibold text-navy">Send controls</h2>
             <p className="mt-1 text-xs text-muted-foreground">
