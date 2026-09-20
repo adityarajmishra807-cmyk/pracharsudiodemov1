@@ -76,6 +76,68 @@ async function attachData(campaign) {
     })),
   };
 }
+export async function enqueueCampaignJob(id) {
+  await pool.query(
+    `INSERT INTO campaign_queue(campaign_id,status,attempts,available_at)
+     VALUES($1,'queued',0,NOW())
+     ON CONFLICT(campaign_id) DO UPDATE
+       SET status=CASE WHEN campaign_queue.status IN ('failed','completed') THEN 'queued' ELSE campaign_queue.status END,
+           available_at=NOW(), updated_at=NOW()`,
+    [id],
+  );
+}
+export async function claimNextCampaignJob() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT campaign_id,attempts
+       FROM campaign_queue
+       WHERE status='queued' AND available_at<=NOW()
+       ORDER BY available_at,created_at
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1`,
+    );
+    if (!rows[0]) { await client.query('COMMIT'); return null; }
+    const attempts = Number(rows[0].attempts || 0) + 1;
+    await client.query(
+      `UPDATE campaign_queue SET status='running',attempts=$2,locked_at=NOW(),updated_at=NOW() WHERE campaign_id=$1`,
+      [rows[0].campaign_id, attempts],
+    );
+    await client.query('COMMIT');
+    return { campaignId: rows[0].campaign_id, attempts };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+export async function finishCampaignJob(id, status = 'completed', error = null) {
+  await pool.query(
+    `UPDATE campaign_queue SET status=$2,error=$3,locked_at=NULL,updated_at=NOW() WHERE campaign_id=$1`,
+    [id,status,error],
+  );
+}
+export async function recoverCampaignJobs() {
+  const { rows } = await pool.query(
+    `UPDATE campaign_queue
+     SET status='queued',locked_at=NULL,updated_at=NOW()
+     WHERE status='running' AND locked_at < NOW() - INTERVAL '5 minutes'
+     RETURNING campaign_id`,
+  );
+  const queued = await pool.query(`SELECT campaign_id FROM campaign_queue WHERE status='queued' AND available_at<=NOW() ORDER BY created_at`);
+  return [...rows.map((r) => r.campaign_id), ...queued.rows.map((r) => r.campaign_id)];
+}
+export async function getQueueStats() {
+  const { rows } = await pool.query(
+    `SELECT
+      COUNT(*) FILTER (WHERE status='queued')::int queued,
+      COUNT(*) FILTER (WHERE status='running')::int running,
+      COUNT(*) FILTER (WHERE status='failed')::int failed,
+      COUNT(*) FILTER (WHERE status='completed')::int completed
+     FROM campaign_queue`,
+  );
+  return rows[0] || { queued:0,running:0,failed:0,completed:0 };
+}
 export async function listCampaigns({ limit = 50 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
   const { rows } = await pool.query('SELECT * FROM campaigns ORDER BY created_at DESC LIMIT $1', [safeLimit]);
