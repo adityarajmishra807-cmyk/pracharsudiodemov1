@@ -17,6 +17,22 @@ export type ApiResponse = {
   message?: string;
 };
 
+export type ButtonPayload = {
+  id: string;
+  displayText: string;
+};
+
+export type ListRow = {
+  title: string;
+  rowId: string;
+  description?: string;
+};
+
+export type ListSection = {
+  title?: string;
+  rows: ListRow[];
+};
+
 export type MediaPayload = {
   base64: string;
   mediatype: 'image' | 'video' | 'document';
@@ -57,6 +73,10 @@ export const sessionsApi = {
   remove: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}`, { method: 'DELETE' }),
   sendText: (instance: string, number: string, text: string, options: { linkPreview?: boolean; delayMs?: number } = {}) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, { method: 'POST', body: JSON.stringify({ number, text, ...options }) }),
+  sendButtons: (instance: string, number: string, payload: { title: string; description?: string; footer?: string; buttons: ButtonPayload[] }) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-buttons`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
+  sendList: (instance: string, number: string, payload: { title: string; description?: string; footerText?: string; buttonText: string; sections: ListSection[] }) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-list`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
   sendMedia: (instance: string, number: string, media: MediaPayload, caption = '', delayMs = 0) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-media`, {
       method: 'POST',
