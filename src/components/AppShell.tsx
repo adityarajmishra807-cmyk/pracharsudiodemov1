@@ -14,7 +14,6 @@ const NAV: NavItem[] = [
   { to: "/leads", label: "CRM / Leads", icon: UserRound, permission: "leadsView", primaryMobile: true },
   { to: "/templates", label: "Templates", icon: FileText, permission: ["templatesUse", "templatesManage"], primaryMobile: true },
   { to: "/sessions", label: "Sessions", icon: Smartphone, permission: "inboxReply" },
-  { to: "/inbox", label: "Inbox", icon: MessageCircle, permission: "inboxReply" },
   { to: "/send", label: "Send Message", icon: Send, permission: "inboxReply" },
   { to: "/audiences", label: "Audiences", icon: ContactRound, permission: "campaigns" },
   { to: "/campaigns", label: "Campaigns", icon: Megaphone, permission: "campaigns" },
