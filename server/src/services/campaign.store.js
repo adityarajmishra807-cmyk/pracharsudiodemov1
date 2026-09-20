@@ -158,11 +158,20 @@ export async function getQueueStats() {
     `SELECT
       COUNT(*) FILTER (WHERE status='queued')::int queued,
       COUNT(*) FILTER (WHERE status='running')::int running,
+      COUNT(*) FILTER (WHERE status='paused')::int paused,
       COUNT(*) FILTER (WHERE status='failed')::int failed,
-      COUNT(*) FILTER (WHERE status='completed')::int completed
+      COUNT(*) FILTER (WHERE status='completed')::int completed,
+      COALESCE(SUM(attempts),0)::int attempts
      FROM campaign_queue`,
   );
-  return rows[0] || { queued:0,running:0,failed:0,completed:0 };
+  const items = await pool.query(
+    `SELECT q.campaign_id,c.name,c.status,q.attempts,q.available_at,q.locked_at,q.updated_at,q.error
+     FROM campaign_queue q JOIN campaigns c ON c.id=q.campaign_id
+     WHERE q.status IN ('queued','running','paused','failed')
+     ORDER BY CASE q.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END,q.updated_at DESC
+     LIMIT 50`,
+  );
+  return {...(rows[0] || {queued:0,running:0,paused:0,failed:0,completed:0,attempts:0}),items:items.rows};
 }
 export async function listCampaigns({ limit = 50 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
