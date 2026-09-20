@@ -125,6 +125,29 @@ function SendPage() {
               mimetype: file!.type || "application/octet-stream",
               fileName: file!.name,
             }, personalize(text.trim(), recipient));
+            if (type === "media-buttons") {
+              const validButtons = buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((button, i) => ({
+                id: button.id || String(i + 1),
+                displayText: personalize(button.displayText.trim(), recipient),
+              }));
+              await sessionsApi.sendButtons(instance, number, {
+                title: personalize(title.trim(), recipient),
+                description: personalize(description.trim(), recipient),
+                footer: personalize(footer.trim(), recipient),
+                buttons: validButtons,
+              });
+            } else if (type === "media-list") {
+              await sessionsApi.sendList(instance, number, {
+                title: personalize(title.trim(), recipient),
+                description: personalize(description.trim(), recipient),
+                footerText: personalize(footer.trim(), recipient),
+                buttonText: personalize(buttonText.trim(), recipient),
+                sections: validSections.map((section) => ({
+                  title: personalize(section.title || "", recipient),
+                  rows: section.rows.map((row) => ({ ...row, title: personalize(row.title, recipient), description: personalize(row.description || "", recipient) })),
+                })),
+              });
+            }
           } else if (isButtonType) {
             const validButtons = buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((button, i) => ({
               id: button.id || String(i + 1),
@@ -277,7 +300,7 @@ function SendPage() {
             <div className="flex items-center justify-between"><div><h2 className="font-semibold text-navy">Live preview</h2><p className="text-xs text-muted-foreground">Preview using the first recipient's personalization data.</p></div><MessageSquare className="size-5 text-primary" /></div>
             <div className="mt-4 flex justify-end rounded-xl bg-[#efeae2] p-4">
               <div className="w-full max-w-[300px] rounded-xl bg-white p-3 shadow-sm">
-                {isMediaType && file && <div className="mb-3 overflow-hidden rounded-lg bg-surface p-2 text-center text-xs text-muted-foreground">{file.type.startsWith("image/") ? <img src={URL.createObjectURL(file)} className="max-h-44 w-full rounded-md object-cover" /> : <div className="py-8"><FileUp className="mx-auto mb-2 size-6 text-primary" />{file.name}</div>}</div>}
+                {isMediaType && file && <div className="mb-3 overflow-hidden rounded-lg bg-surface p-2 text-center text-xs text-muted-foreground">{file.type.startsWith("image/") ? <div className="flex max-h-44 items-center justify-center overflow-hidden rounded-md bg-surface"><img src={URL.createObjectURL(file)} className="max-h-44 w-full object-cover" /></div> : <div className="py-8"><FileUp className="mx-auto mb-2 size-6 text-primary" />{file.name}</div>}</div>}
                 {isButtonType || isListType ? <><p className="whitespace-pre-wrap text-sm font-semibold">{personalize(title || "Message title", previewRecipient)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{personalize(description || previewText || "Your message preview", previewRecipient)}</p>{isButtonType ? <div className="mt-3 space-y-1">{buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((b) => <div key={b.id} className="rounded-md border border-primary/20 py-2 text-center text-sm font-medium text-primary">{personalize(b.displayText, previewRecipient)}</div>)}</div> : <div className="mt-3 space-y-1">{sections.flatMap((s) => s.rows).filter((r) => r.title.trim()).slice(0, 10).map((r) => <div key={r.rowId} className="rounded-md border p-2"><p className="text-sm font-medium">{personalize(r.title, previewRecipient)}</p>{r.description && <p className="text-xs text-muted-foreground">{personalize(r.description, previewRecipient)}</p>}</div>)}</div>}{isListType && <div className="mt-2 rounded-md bg-surface py-2 text-center text-xs font-medium">{personalize(buttonText, previewRecipient)}</div>}</> : <p className="whitespace-pre-wrap text-sm">{previewText || "Your message preview will appear here."}</p>}
                 <p className="mt-1 text-right text-[10px] text-muted-foreground">now</p>
               </div>
