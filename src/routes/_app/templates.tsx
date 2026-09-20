@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_app/templates")({
 });
 
 const categories = ["Marketing", "Utility", "Support", "Follow-up"];
-const types = ["text", "media-text", "buttons", "list", "media-buttons", "media-list"] as const;
+const types = ["text", "media", "media-text", "buttons", "list", "media-buttons", "media-list"] as const;
 type TemplateType = typeof types[number];
 
 type Draft = {
@@ -103,6 +103,7 @@ function TemplatesPage() {
             <div><Label>Status</Label><Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v as Draft["status"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["draft","approved","paused"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div></div>
 
           {draft.type === "text" && <div><Label>Message</Label><Textarea rows={6} value={String(draft.data.text || "")} onChange={(e) => updateData("text", e.target.value)} /><p className="mt-1 text-xs text-muted-foreground">Variables: {"{{name}}"}, {"{{company}}"}, {"{{custom1}}"}, {"{{custom2}}"}</p></div>}
+          {draft.type === "media" && <div><Label>Media JSON</Label><Textarea rows={6} value={String(draft.data.mediaJson || "")} onChange={(e) => updateData("mediaJson", e.target.value)} placeholder='{"base64":"...","mediatype":"image","mimetype":"image/jpeg","fileName":"image.jpg"}' /></div>}
           {draft.type === "media-text" && <div className="space-y-3"><div><Label>Media payload</Label><Textarea rows={3} value={String(draft.data.mediaBase64 || "")} onChange={(e) => updateData("mediaBase64", e.target.value)} placeholder="Base64 media" /></div><div><Label>Caption</Label><Textarea value={String(draft.data.caption || "")} onChange={(e) => updateData("caption", e.target.value)} /></div></div>}
           {["buttons","media-buttons"].includes(draft.type) && <div className="space-y-3"><div><Label>Title</Label><Input value={String(draft.data.title || "")} onChange={(e) => updateData("title", e.target.value)} /></div><div><Label>Description</Label><Textarea value={String(draft.data.description || "")} onChange={(e) => updateData("description", e.target.value)} /></div><div><Label>Buttons JSON</Label><Textarea rows={6} value={String(draft.data.buttonsJson || '[{"id":"offer","displayText":"View offer"}]')} onChange={(e) => updateData("buttonsJson", e.target.value)} placeholder='[{"id":"offer","displayText":"View offer"}]' /></div></div>}
           {["list","media-list"].includes(draft.type) && <div className="space-y-3"><div><Label>Title</Label><Input value={String(draft.data.title || "")} onChange={(e) => updateData("title", e.target.value)} /></div><div><Label>Menu button</Label><Input value={String(draft.data.buttonText || "View options")} onChange={(e) => updateData("buttonText", e.target.value)} /></div><div><Label>Sections JSON</Label><Textarea rows={8} value={String(draft.data.sectionsJson || '[]')} onChange={(e) => updateData("sectionsJson", e.target.value)} placeholder='[{"title":"Options","rows":[{"rowId":"1","title":"Option 1"}]}]' /></div></div>}
