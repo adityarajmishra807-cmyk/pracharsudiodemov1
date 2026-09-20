@@ -1,7 +1,7 @@
 export type Template = {
   id: string;
   name: string;
-  type: "text" | "media-text" | "buttons" | "list" | "media-buttons" | "media-list";
+  type: "text" | "media" | "media-text" | "buttons" | "list" | "media-buttons" | "media-list";
   category: string;
   status: "draft" | "approved" | "paused";
   data: Record<string, unknown>;
