@@ -201,8 +201,20 @@ export async function sendButtons(instance, number, payload) {
   const title = String(payload?.title || '').trim();
   const buttons = Array.isArray(payload?.buttons) ? payload.buttons : [];
   if (!cleanNumberValue) throw new EvolutionError('Recipient must be a phone number, not a WhatsApp JID.', 400);
-  if (!/^.{1,4096}$/.test(title)) throw new EvolutionError('Button title is required.', 400);
+  if (!/^\d{8,15}$/.test(cleanNumberValue)) throw new EvolutionError('Recipient phone number must contain 8–15 digits.', 400);
+  if (!title) throw new EvolutionError('Button title is required.', 400);
   if (!buttons.length || buttons.length > 3) throw new EvolutionError('Buttons require 1–3 items.', 400);
+
+  const normalizedButtons = buttons.map((button, index) => ({
+    type: String(button?.type || 'reply').toLowerCase(),
+    displayText: String(button?.displayText || button?.text || '').trim(),
+    id: String(button?.id || button?.buttonId || index + 1),
+    ...(button?.url ? { url: String(button.url) } : {}),
+    ...(button?.phoneNumber ? { phoneNumber: String(button.phoneNumber) } : {}),
+  }));
+  if (normalizedButtons.some((button) => !button.displayText || !button.id)) {
+    throw new EvolutionError('Each button requires an id and displayText.', 400);
+  }
 
   const { data } = await request({
     method: 'POST',
@@ -211,13 +223,12 @@ export async function sendButtons(instance, number, payload) {
       number: cleanNumberValue,
       title,
       description: String(payload?.description || '').trim(),
-      footer: String(payload?.footer || '').trim(),
-      buttons,
+      footer: String(payload?.footer || payload?.footerText || '').trim(),
+      buttons: normalizedButtons,
     },
   });
   return data;
 }
-
 export async function sendList(instance, number, payload) {
   const cleanNumberValue = cleanNumber(number);
   const title = String(payload?.title || '').trim();
