@@ -115,7 +115,8 @@ function SendPage() {
     if (!recipients.length) return toast.error("Import at least one recipient.");
     if (recipients.length > MAX_RECIPIENTS)
       return toast.error(`Maximum ${MAX_RECIPIENTS} recipients are allowed.`);
-    if (type === "text" && !text.trim()) return toast.error("Message text is required.");
+    if ((type === "text" || isButtonType || isListType) && !text.trim())
+      return toast.error("Message text is required.");
     if (isMediaType && !file) return toast.error("Attach a file first.");
     if (file && file.size > MAX_MEDIA_BYTES) return toast.error("Media must be 8 MB or smaller.");
 
@@ -123,11 +124,10 @@ function SendPage() {
     if (isMediaType && !mediatype) return toast.error("Unsupported media type.");
     if (
       isButtonType &&
-      (!title.trim() ||
-        buttons.filter((b) => b.displayText.trim()).length < 1 ||
+      (buttons.filter((b) => b.displayText.trim()).length < 1 ||
         buttons.filter((b) => b.displayText.trim()).length > 3)
     ) {
-      return toast.error("Add a title and 1–3 buttons.");
+      return toast.error("Add 1–3 buttons.");
     }
 
     const validSections = sections
@@ -183,16 +183,12 @@ function SendPage() {
                   displayText: personalize(button.displayText.trim(), recipient),
                 }));
               await sessionsApi.sendButtons(instance, number, {
-                title: personalize(title.trim(), recipient),
-                description: personalize(description.trim(), recipient),
-                footer: personalize(footer.trim(), recipient),
+                text: personalize(text.trim(), recipient),
                 buttons: validButtons,
               });
             } else if (type === "media-list") {
               await sessionsApi.sendList(instance, number, {
-                title: personalize(title.trim(), recipient),
-                description: personalize(description.trim(), recipient),
-                footerText: personalize(footer.trim(), recipient),
+                text: personalize(text.trim(), recipient),
                 buttonText: personalize(buttonText.trim(), recipient),
                 sections: validSections.map((section) => ({
                   title: personalize(section.title || "", recipient),
@@ -213,16 +209,12 @@ function SendPage() {
                 displayText: personalize(button.displayText.trim(), recipient),
               }));
             await sessionsApi.sendButtons(instance, number, {
-              title: personalize(title.trim(), recipient),
-              description: personalize(description.trim(), recipient),
-              footer: personalize(footer.trim(), recipient),
+              text: personalize(text.trim(), recipient),
               buttons: validButtons,
             });
           } else {
             await sessionsApi.sendList(instance, number, {
-              title: personalize(title.trim(), recipient),
-              description: personalize(description.trim(), recipient),
-              footerText: personalize(footer.trim(), recipient),
+              text: personalize(text.trim(), recipient),
               buttonText: personalize(buttonText.trim(), recipient),
               sections: validSections.map((section) => ({
                 title: personalize(section.title || "", recipient),
@@ -405,23 +397,12 @@ function SendPage() {
             )}
 
             {(isButtonType || isListType) && (
-              <div className="space-y-3">
-                <Input
-                  placeholder="Title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-                <Textarea
-                  placeholder="Description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-                <Input
-                  placeholder="Footer (optional)"
-                  value={footer}
-                  onChange={(e) => setFooter(e.target.value)}
-                />
-              </div>
+              <Textarea
+                className="min-h-28 resize-y"
+                placeholder="Write the message text..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
             )}
 
             {isButtonType && (
@@ -589,14 +570,8 @@ function SendPage() {
                 )}
                 {isButtonType || isListType ? (
                   <>
-                    <p className="whitespace-pre-wrap text-sm font-semibold">
-                      {personalize(title || "Message title", previewRecipient)}
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                      {personalize(
-                        description || previewText || "Your message preview",
-                        previewRecipient,
-                      )}
+                    <p className="whitespace-pre-wrap text-sm">
+                      {previewText || "Your message preview will appear here."}
                     </p>
                     {isButtonType ? (
                       <div className="mt-3 space-y-1">
