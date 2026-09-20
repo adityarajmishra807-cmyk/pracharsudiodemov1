@@ -72,9 +72,6 @@ function SendPage() {
   const [type, setType] = useState<MessageType>("text");
   const [text, setText] = useState("Hello {{name}},\n\nWe have an offer for {{company}}.");
   const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [footer, setFooter] = useState("");
   const [buttonText, setButtonText] = useState("Choose");
   const [buttons, setButtons] = useState<ButtonPayload[]>([newButton()]);
   const [sections, setSections] = useState<ListSection[]>([newSection()]);
@@ -146,8 +143,8 @@ function SendPage() {
       }))
       .filter((section) => section.rows.length);
     const rowCount = validSections.reduce((count, section) => count + section.rows.length, 0);
-    if (isListType && (!title.trim() || !buttonText.trim() || !rowCount || rowCount > 10)) {
-      return toast.error("Add a list title, menu button and 1–10 rows.");
+    if (isListType && (!text.trim() || !buttonText.trim() || !rowCount || rowCount > 10)) {
+      return toast.error("Enter message text, a menu button and 1–10 rows.");
     }
 
     setBusy(true);
