@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,7 +18,6 @@ export const Route = createFileRoute("/_app/templates")({
   component: TemplatesPage,
 });
 
-const categories = ["Marketing", "Utility", "Support", "Follow-up"];
 const types = ["text", "media", "media-text", "buttons", "list", "media-buttons", "media-list"] as const;
 type TemplateType = typeof types[number];
 type ButtonType = "reply" | "url" | "phone" | "copy_code";
@@ -29,8 +27,6 @@ type TemplateSection = { title?: string; rows: TemplateRow[] };
 
 type Draft = {
   name: string;
-  category: string;
-  status: "draft" | "approved" | "paused";
   type: TemplateType;
   data: Record<string, unknown>;
 };
@@ -45,8 +41,6 @@ const defaultSections = (): TemplateSection[] => [
 
 const emptyDraft = (): Draft => ({
   name: "",
-  category: "Marketing",
-  status: "draft",
   type: "text",
   data: { text: "Hi {{name}}, " },
 });
@@ -110,8 +104,6 @@ function TemplatesPage() {
     setEditingId(t.id);
     setDraft({
       name: t.name,
-      category: t.category || String(t.data.category || "Marketing"),
-      status: t.status || "draft",
       type: t.type,
       data: { ...t.data },
     });
@@ -147,7 +139,7 @@ function TemplatesPage() {
       return toast.error("Media is required for this template type.");
     }
     try {
-      const payload = { name: draft.name.trim(), type: draft.type, category: draft.category, status: draft.status, data: draft.data };
+      const payload = { name: draft.name.trim(), type: draft.type, data: draft.data };
       if (editingId) await templatesApi.update(editingId, payload); else await templatesApi.create(payload);
       toast.success(editingId ? "Template updated." : "Template created.");
       setOpen(false); await load();
@@ -172,11 +164,6 @@ function TemplatesPage() {
         <div><Label>Type</Label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as TemplateType, data: {} })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{types.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div><Label>Category</Label><Select value={draft.category} onValueChange={(v) => setDraft({ ...draft, category: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categories.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Status</Label><Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v as Draft["status"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["draft", "approved", "paused"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
-      </div>
-
       {draft.type === "text" && <div>
         <Label>Message</Label>
         <Textarea rows={7} value={String(draft.data.text || "")} onChange={(e) => updateData("text", e.target.value)} />
@@ -188,7 +175,7 @@ function TemplatesPage() {
         <input className="block w-full text-sm" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={(e) => handleMedia(e.target.files?.[0])} />
         {draft.data.mediaFileName && <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm"><span className="truncate">{String(draft.data.mediaFileName)}</span><Button type="button" size="sm" variant="ghost" onClick={() => { updateData("mediaBase64", ""); updateData("mediaFileName", ""); updateData("mediaMimeType", ""); }}><X className="size-4" /></Button></div>}
         {draft.type === "media" && <div><Label>Caption</Label><Textarea rows={4} value={String(draft.data.text || draft.data.caption || "")} onChange={(e) => updateData("text", e.target.value)} /></div>}
-        {draft.type !== "media" && <div><Label>Message</Label><Textarea rows={4} value={String(draft.data.text || "")} onChange={(e) => updateData("text", e.target.value)} /></div>}
+        {draft.type === "media-text" && <div><Label>Message</Label><Textarea rows={4} value={String(draft.data.text || "")} onChange={(e) => updateData("text", e.target.value)} /></div>}
       </div>}
 
       {isButtons && <div className="space-y-3 rounded-xl border border-border p-3">
@@ -261,7 +248,7 @@ function TemplatesPage() {
     <PageHeader title="Templates" description="Persistent reusable campaign templates. Use {{name}}, {{company}}, {{custom1}} and {{custom2}} for personalisation." actions={canManage ? <Button onClick={startCreate}><Plus className="size-4" /> New template</Button> : null} />
     {!items.length ? <EmptyState icon={FileText} title="No templates yet" description="Create a reusable message template for campaigns." action={canManage ? <Button onClick={startCreate}>Create template</Button> : undefined} /> :
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map((t) => <li key={t.id} className="flex flex-col rounded-lg border border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-navy">{t.name}</p><p className="text-xs text-muted-foreground">{t.category} · {t.type}</p></div><StatusBadge value={t.status} /></div>
+        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-navy">{t.name}</p><p className="text-xs text-muted-foreground">{t.type}</p></div></div>
         <p className="mt-3 line-clamp-4 flex-1 whitespace-pre-wrap text-sm text-muted-foreground">{preview(t)}</p>
         <div className="mt-3 flex justify-end gap-1">{canManage && <><Button size="sm" variant="ghost" onClick={() => startEdit(t)}><Pencil className="size-4" /></Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => void remove(t.id)}><Trash2 className="size-4" /></Button></>}</div>
       </li>)}</ul>}
