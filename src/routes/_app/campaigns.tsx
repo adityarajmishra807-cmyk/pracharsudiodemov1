@@ -39,13 +39,6 @@ function fileToBase64(file: File) {
   });
 }
 
-function parseRecipients(value: string) {
-  return value.split(/\r?\n/).map((line) => {
-    const [phone, name = "", company = "", custom1 = "", custom2 = ""] = line.split(",").map((v) => v.trim());
-    return phone ? { phone, name, company, custom1, custom2 } : null;
-  }).filter(Boolean) as Array<{ phone: string; name: string; company: string; custom1: string; custom2: string }>;
-}
-
 function CampaignsPage() {
   const { can } = useStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
