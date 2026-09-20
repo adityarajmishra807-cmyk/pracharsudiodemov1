@@ -1,4 +1,4 @@
-import { getCampaign, listCampaigns, recordCampaignMessage, recordCampaignResult, updateCampaign } from './campaign.store.js';
+import { claimNextCampaignJob, enqueueCampaignJob, finishCampaignJob, getCampaign, getQueueStats, recordCampaignMessage, recordCampaignResult, recoverCampaignJobs, updateCampaign } from './campaign.store.js';
 import { sendButtons, sendList, sendMedia, sendText } from './evolution.service.js';
 import { shouldAutoPause } from './campaign.safety.js';
 
@@ -18,10 +18,14 @@ function messageIdFrom(response) { return response?.key?.id || response?.data?.k
 
 export function enqueueCampaign(id) {
   if (!queue.includes(id)) queue.push(id);
+  void enqueueCampaignJob(id).catch((error) => console.error('[campaign-worker] queue persistence failed:', error));
   void drain();
 }
 
-export function getQueueSize() { return queue.length + (running ? 1 : 0); }
+export async function getQueueSize() {
+  const stats = await getQueueStats();
+  return Number(stats.queued || 0) + Number(stats.running || 0);
+}
 export function pauseCampaign(id) { controls.set(id, 'paused'); }
 export function resumeCampaign(id) { controls.set(id, 'resumed'); enqueueCampaign(id); }
 export function cancelCampaign(id) { controls.set(id, 'cancelled'); }
@@ -132,19 +136,29 @@ async function drain() {
   if (running) return;
   running = true;
   try {
-    while (queue.length) {
-      const id = queue.shift();
-      try { await processCampaign(id); } catch (error) {
+    while (true) {
+      const job = await claimNextCampaignJob();
+      if (!job) break;
+      const id = job.campaignId;
+      try {
+        await processCampaign(id);
+        const latest = await getCampaign(id);
+        if (latest?.status === 'failed') await finishCampaignJob(id, 'failed', latest.error || null);
+        else if (['completed','cancelled'].includes(latest?.status)) await finishCampaignJob(id, 'completed', latest.error || null);
+        else if (latest?.status === 'paused') await finishCampaignJob(id, 'queued', latest.error || null);
+        else await finishCampaignJob(id, 'completed', null);
+      } catch (error) {
         await updateCampaign(id, { status: 'failed', error: error?.message || 'Campaign worker failed.' });
+        await finishCampaignJob(id, 'failed', error?.message || 'Campaign worker failed.');
       }
     }
   } finally { running = false; }
 }
 
 export async function recoverCampaigns() {
-  const campaigns = await listCampaigns({ limit: 200 });
-  for (const campaign of campaigns) {
-    if (campaign.status === 'running') await updateCampaign(campaign.id, { status: 'queued', startedAt: null });
-    if (campaign.status === 'queued' || campaign.status === 'running') enqueueCampaign(campaign.id);
+  const ids = await recoverCampaignJobs();
+  for (const id of ids) {
+    if (!queue.includes(id)) queue.push(id);
   }
+  void drain();
 }
