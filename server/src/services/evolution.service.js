@@ -228,11 +228,11 @@ export async function sendButtons(instance, number, payload) {
 }
 export async function sendList(instance, number, payload) {
   const cleanNumberValue = cleanNumber(number);
-  const title = String(payload?.title || '').trim();
+  const message = String(payload?.text || '').trim();
   const buttonText = String(payload?.buttonText || '').trim();
   const sections = Array.isArray(payload?.sections) ? payload.sections : [];
   if (!cleanNumberValue) throw new EvolutionError('Recipient number is required', 400);
-  if (!title) throw new EvolutionError('List title is required', 400);
+  if (!message) throw new EvolutionError('Message text is required', 400);
   if (!buttonText) throw new EvolutionError('List button text is required', 400);
   if (!sections.length) throw new EvolutionError('At least one list section is required', 400);
   const rowCount = sections.reduce((total, section) => total + (Array.isArray(section?.rows) ? section.rows.length : 0), 0);
@@ -241,18 +241,10 @@ export async function sendList(instance, number, payload) {
   const { data } = await request({
     method: 'POST',
     url: `/message/sendList/${encodeURIComponent(instance)}`,
-    data: {
-      number: cleanNumberValue,
-      title,
-      description: String(payload?.description || '').trim(),
-      footerText: String(payload?.footerText || '').trim(),
-      buttonText,
-      sections,
-    },
+    data: { number: cleanNumberValue, text: message, buttonText, sections },
   });
   return data;
 }
-
 export async function findChats(instance) {
   const { data } = await request({
     method: 'POST',
