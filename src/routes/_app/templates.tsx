@@ -122,9 +122,15 @@ function TemplatesPage() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      updateData("mediaBase64", String(reader.result || ""));
-      updateData("mediaFileName", file.name);
-      updateData("mediaMimeType", file.type || "application/octet-stream");
+      setDraft((d) => ({
+        ...d,
+        data: {
+          ...d.data,
+          mediaBase64: String(reader.result || ""),
+          mediaFileName: file.name,
+          mediaMimeType: file.type || "application/octet-stream",
+        },
+      }));
     };
     reader.onerror = () => toast.error("Could not read media file.");
     reader.readAsDataURL(file);
@@ -173,7 +179,17 @@ function TemplatesPage() {
       {isMedia && <div className="space-y-3 rounded-xl border border-border p-3">
         <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">Media</p><p className="text-xs text-muted-foreground">Image, video or document · max 8MB</p></div><Upload className="size-4 text-muted-foreground" /></div>
         <input className="block w-full text-sm" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={(e) => handleMedia(e.target.files?.[0])} />
-        {draft.data.mediaFileName && <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm"><span className="truncate">{String(draft.data.mediaFileName)}</span><Button type="button" size="sm" variant="ghost" onClick={() => { updateData("mediaBase64", ""); updateData("mediaFileName", ""); updateData("mediaMimeType", ""); }}><X className="size-4" /></Button></div>}
+        {draft.data.mediaFileName && (
+          <div className="space-y-2 rounded-lg bg-surface px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate">{String(draft.data.mediaFileName)}</span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setDraft((d) => ({ ...d, data: { ...d.data, mediaBase64: "", mediaFileName: "", mediaMimeType: "" } }))}><X className="size-4" /></Button>
+            </div>
+            {String(draft.data.mediaMimeType || "").startsWith("image/") && draft.data.mediaBase64 && (
+              <img src={String(draft.data.mediaBase64)} alt="Saved template media" className="max-h-40 w-full rounded-lg object-cover" />
+            )}
+          </div>
+        )}
         {draft.type === "media" && <div><Label>Caption</Label><Textarea rows={4} value={String(draft.data.text || draft.data.caption || "")} onChange={(e) => updateData("text", e.target.value)} /></div>}
         {draft.type === "media-text" && <div><Label>Message</Label><Textarea rows={4} value={String(draft.data.text || "")} onChange={(e) => updateData("text", e.target.value)} /></div>}
       </div>}
