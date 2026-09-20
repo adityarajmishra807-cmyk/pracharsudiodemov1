@@ -84,4 +84,4 @@ crmRouter.get('/stats',async(_req,res,next)=>{
       campaigns:Number(ca.rows[0].total)
     });
   }catch(e){next(e);}
-}
+})

@@ -12,33 +12,68 @@ function baseCampaign(row) {
 }
 async function attachData(campaign) {
   if (!campaign) return null;
+
   const [recipients, results] = await Promise.all([
-    pool.query('SELECT recipient_index, recipient FROM campaign_recipients WHERE campaign_id=$1 ORDER BY recipient_index', [campaign.id]),
-    pool.query(`
-      SELECT r.recipient_index AS index, r.phone, r.ok, r.message, r.timestamp,
-        COALESCE(m.statuses, '[]'::jsonb) AS delivery_statuses
-      FROM campaign_results r
-      LEFT JOIN (
-        SELECT campaign_id, recipient_index,
-          jsonb_agg(
-            jsonb_build_object(
-              'messageId', message_id,
-              'type', message_type,
-              'status', status,
-              'updatedAt', status_updated_at
-            ) ORDER BY status_updated_at
-          ) AS statuses
-        FROM campaign_messages
-        GROUP BY campaign_id, recipient_index
-      ) m ON m.campaign_id=r.campaign_id AND m.recipient_index=r.recipient_index
-      WHERE r.campaign_id=$1
-      ORDER BY r.recipient_index
-    `, [campaign.id]),
+    pool.query(
+      `
+        SELECT
+          recipient_index,
+          recipient
+        FROM campaign_recipients
+        WHERE campaign_id = $1
+        ORDER BY recipient_index
+      `,
+      [campaign.id],
+    ),
+
+    pool.query(
+      `
+        SELECT
+          r.recipient_index AS index,
+          r.phone,
+          r.ok,
+          r.message,
+          r.timestamp,
+          COALESCE(m.statuses, '[]'::jsonb) AS delivery_statuses
+        FROM campaign_results r
+        LEFT JOIN (
+          SELECT
+            campaign_id,
+            recipient_index,
+            jsonb_agg(
+              jsonb_build_object(
+                'messageId', message_id,
+                'type', message_type,
+                'status', status,
+                'updatedAt', status_updated_at
+              )
+              ORDER BY status_updated_at
+            ) AS statuses
+          FROM campaign_messages
+          GROUP BY campaign_id, recipient_index
+        ) m
+          ON m.campaign_id = r.campaign_id
+          AND m.recipient_index = r.recipient_index
+        WHERE r.campaign_id = $1
+        ORDER BY r.recipient_index
+      `,
+      [campaign.id],
+    ),
   ]);
+
   return {
     ...campaign,
+
     recipients: recipients.rows.map((row) => row.recipient || {}),
-    results: results.rows.map((row) => ({ index: row.index, phone: row.phone, ok: row.ok, message: row.message || undefined, timestamp: iso(row.timestamp), deliveryStatuses: row.delivery_statuses || [] })),
+
+    results: results.rows.map((row) => ({
+      index: row.index,
+      phone: row.phone,
+      ok: row.ok,
+      message: row.message || undefined,
+      timestamp: iso(row.timestamp),
+      deliveryStatuses: row.delivery_statuses || [],
+    })),
   };
 }
 export async function listCampaigns({ limit = 50 } = {}) {
