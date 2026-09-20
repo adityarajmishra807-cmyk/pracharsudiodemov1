@@ -145,7 +145,7 @@ async function drain() {
         const latest = await getCampaign(id);
         if (latest?.status === 'failed') await finishCampaignJob(id, 'failed', latest.error || null);
         else if (['completed','cancelled'].includes(latest?.status)) await finishCampaignJob(id, 'completed', latest.error || null);
-        else if (latest?.status === 'paused') await finishCampaignJob(id, 'queued', latest.error || null);
+        else if (latest?.status === 'paused') await finishCampaignJob(id, 'paused', latest.error || null);
         else await finishCampaignJob(id, 'completed', null);
       } catch (error) {
         await updateCampaign(id, { status: 'failed', error: error?.message || 'Campaign worker failed.' });
