@@ -1,15 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CheckCircle2, FileUp, MessageSquare, Plus, Send, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { FileUp, Plus, Send, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSessions } from "@/hooks/use-sessions";
 import { sessionsApi, type ButtonPayload, type ListRow, type ListSection, type MediaPayload } from "@/lib/sessions-api";
+import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
 
 export const Route = createFileRoute("/_app/send")({ component: SendPage });
 
 const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
+const MAX_RECIPIENTS = 250;
+const MIN_DELAY_MS = 1500;
 type MessageType = "text" | "media" | "buttons" | "list";
 
 function mediaType(file: File): MediaPayload["mediatype"] | null {
@@ -32,13 +37,25 @@ const newButton = (): ButtonPayload => ({ id: crypto.randomUUID(), displayText: 
 const newRow = (): ListRow => ({ title: "", rowId: crypto.randomUUID(), description: "" });
 const newSection = (): ListSection => ({ title: "", rows: [newRow()] });
 
+function personalize(value: string, recipient: RecipientRow) {
+  return value
+    .replaceAll("{{name}}", recipient.name || "")
+    .replaceAll("{{company}}", recipient.company || "")
+    .replaceAll("{{custom1}}", recipient.custom1 || "")
+    .replaceAll("{{custom2}}", recipient.custom2 || "");
+}
+
 function SendPage() {
   const { data: sessions = [] } = useSessions();
-  const connected = useMemo(() => sessions.filter((s: any) => ["open", "connected", "online"].includes(String(s.state || s.status || "").toLowerCase())), [sessions]);
+  const connected = useMemo(
+    () => sessions.filter((s: any) => ["open", "connected", "online"].includes(String(s.state || s.status || "").toLowerCase())),
+    [sessions],
+  );
+
   const [instance, setInstance] = useState("");
-  const [number, setNumber] = useState("");
+  const [recipients, setRecipients] = useState<RecipientRow[]>([]);
   const [type, setType] = useState<MessageType>("text");
-  const [text, setText] = useState("");
+  const [text, setText] = useState("Hello {{name}},\n\nWe have an offer for {{company}}.");
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -46,68 +63,230 @@ function SendPage() {
   const [buttonText, setButtonText] = useState("Choose");
   const [buttons, setButtons] = useState<ButtonPayload[]>([newButton()]);
   const [sections, setSections] = useState<ListSection[]>([newSection()]);
+  const [delayMs, setDelayMs] = useState("1500");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState({ sent: 0, failed: 0, total: 0 });
   const [result, setResult] = useState("");
 
+  const updateSection = (si: number, patch: Partial<ListSection>) =>
+    setSections((items) => items.map((item, index) => index === si ? { ...item, ...patch } : item));
+
+  const updateRow = (si: number, ri: number, patch: Partial<ListRow>) =>
+    setSections((items) => items.map((section, index) => index === si
+      ? { ...section, rows: section.rows.map((row, rowIndex) => rowIndex === ri ? { ...row, ...patch } : row) }
+      : section));
+
   const send = async () => {
-    if (!instance || !/^\d{8,15}$/.test(number)) return;
-    setBusy(true); setResult("");
+    if (!instance) return toast.error("Select a connected Evolution instance.");
+    if (!recipients.length) return toast.error("Import at least one recipient.");
+    if (recipients.length > MAX_RECIPIENTS) return toast.error(`Maximum ${MAX_RECIPIENTS} recipients are allowed.`);
+    if (type === "text" && !text.trim()) return toast.error("Message text is required.");
+    if (type === "media" && !file) return toast.error("Attach a file first.");
+    if (file && file.size > MAX_MEDIA_BYTES) return toast.error("Media must be 8 MB or smaller.");
+
+    const mediatype = file ? mediaType(file) : null;
+    if (type === "media" && !mediatype) return toast.error("Unsupported media type.");
+    if (type === "buttons" && (!title.trim() || buttons.filter((b) => b.displayText.trim()).length < 1 || buttons.filter((b) => b.displayText.trim()).length > 3)) {
+      return toast.error("Add a title and 1–3 buttons.");
+    }
+
+    const validSections = sections
+      .map((section) => ({ title: section.title?.trim(), rows: section.rows.filter((row) => row.title.trim()).map((row, i) => ({ title: row.title.trim(), rowId: row.rowId || String(i + 1), description: row.description?.trim() })) }))
+      .filter((section) => section.rows.length);
+    const rowCount = validSections.reduce((count, section) => count + section.rows.length, 0);
+    if (type === "list" && (!title.trim() || !buttonText.trim() || !rowCount || rowCount > 10)) {
+      return toast.error("Add a list title, menu button and 1–10 rows.");
+    }
+
+    setBusy(true);
+    setResult("");
+    setProgress({ sent: 0, failed: 0, total: recipients.length });
+
     try {
-      if (type === "text") {
-        if (!text.trim()) throw new Error("Message text is required.");
-        await sessionsApi.sendText(instance, number, text.trim());
-      } else if (type === "media") {
-        if (!file) throw new Error("Attach a file first.");
-        if (file.size > MAX_MEDIA_BYTES) throw new Error("Media must be 8 MB or smaller.");
-        const mediatype = mediaType(file);
-        if (!mediatype) throw new Error("Unsupported media type. Use an image, video, or document.");
-        await sessionsApi.sendMedia(instance, number, { base64: await fileToBase64(file), mediatype, mimetype: file.type || "application/octet-stream", fileName: file.name }, text.trim());
-      } else if (type === "buttons") {
-        const validButtons = buttons.filter((b) => b.displayText.trim()).map((b, i) => ({ id: b.id || String(i + 1), displayText: b.displayText.trim() }));
-        if (!title.trim()) throw new Error("Button title is required.");
-        if (!validButtons.length || validButtons.length > 3) throw new Error("Buttons require 1–3 items.");
-        await sessionsApi.sendButtons(instance, number, { title: title.trim(), description: description.trim(), footer: footer.trim(), buttons: validButtons });
-      } else {
-        const validSections = sections.map((s) => ({ title: s.title?.trim(), rows: s.rows.filter((r) => r.title.trim()).map((r, i) => ({ title: r.title.trim(), rowId: r.rowId || String(i + 1), description: r.description?.trim() })) })).filter((s) => s.rows.length);
-        const rowCount = validSections.reduce((n, s) => n + s.rows.length, 0);
-        if (!title.trim()) throw new Error("List title is required.");
-        if (!buttonText.trim()) throw new Error("List button text is required.");
-        if (!rowCount || rowCount > 10) throw new Error("Lists require 1–10 rows.");
-        await sessionsApi.sendList(instance, number, { title: title.trim(), description: description.trim(), footerText: footer.trim(), buttonText: buttonText.trim(), sections: validSections });
+      const base64 = file ? await fileToBase64(file) : "";
+      let sent = 0;
+      let failed = 0;
+
+      for (let index = 0; index < recipients.length; index += 1) {
+        const recipient = recipients[index];
+        try {
+          const number = recipient.phone;
+          if (type === "text") {
+            await sessionsApi.sendText(instance, number, personalize(text.trim(), recipient));
+          } else if (type === "media") {
+            await sessionsApi.sendMedia(instance, number, {
+              base64,
+              mediatype: mediatype!,
+              mimetype: file!.type || "application/octet-stream",
+              fileName: file!.name,
+            }, personalize(text.trim(), recipient));
+          } else if (type === "buttons") {
+            const validButtons = buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((button, i) => ({
+              id: button.id || String(i + 1),
+              displayText: personalize(button.displayText.trim(), recipient),
+            }));
+            await sessionsApi.sendButtons(instance, number, {
+              title: personalize(title.trim(), recipient),
+              description: personalize(description.trim(), recipient),
+              footer: personalize(footer.trim(), recipient),
+              buttons: validButtons,
+            });
+          } else {
+            await sessionsApi.sendList(instance, number, {
+              title: personalize(title.trim(), recipient),
+              description: personalize(description.trim(), recipient),
+              footerText: personalize(footer.trim(), recipient),
+              buttonText: personalize(buttonText.trim(), recipient),
+              sections: validSections.map((section) => ({
+                title: personalize(section.title || "", recipient),
+                rows: section.rows.map((row) => ({
+                  ...row,
+                  title: personalize(row.title, recipient),
+                  description: personalize(row.description || "", recipient),
+                })),
+              })),
+            });
+          }
+          sent += 1;
+        } catch {
+          failed += 1;
+        }
+        setProgress({ sent, failed, total: recipients.length });
+        if (index < recipients.length - 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, Math.max(MIN_DELAY_MS, Number(delayMs) || MIN_DELAY_MS)));
+        }
       }
-      setResult("Message sent successfully.");
-      setText(""); setFile(null); setTitle(""); setDescription(""); setFooter("");
-    } catch (e) { setResult(e instanceof Error ? e.message : "Message failed."); }
-    finally { setBusy(false); }
+
+      setResult(failed ? `Completed: ${sent} sent, ${failed} failed.` : `Successfully sent to all ${sent} recipients.`);
+      if (!failed) toast.success(`Sent to ${sent} recipients.`);
+      else toast.warning(`${sent} sent, ${failed} failed.`);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "Message sending failed.");
+      toast.error(e instanceof Error ? e.message : "Message sending failed.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div><p className="text-xs font-semibold tracking-wider text-primary">WHATSAPP</p><h1 className="text-2xl font-bold text-navy">Send Message</h1><p className="text-sm text-muted-foreground">Send text, media, buttons, or interactive lists through a connected Evolution instance.</p></div>
-      <div className="space-y-4 rounded-xl border border-border bg-white p-5">
-        <select className="h-10 w-full rounded-md border px-3 text-sm" value={instance} onChange={(e) => setInstance(e.target.value)}><option value="">Select connected instance</option>{connected.map((s: any) => <option key={s.instanceName} value={s.instanceName}>{s.instanceName}</option>)}</select>
-        <Input placeholder="919999999999" value={number} onChange={(e) => setNumber(e.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={15} />
-        <select className="h-10 w-full rounded-md border px-3 text-sm" value={type} onChange={(e) => setType(e.target.value as MessageType)}><option value="text">Text</option><option value="media">Media</option><option value="buttons">Buttons</option><option value="list">List</option></select>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">WhatsApp Messaging</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-navy">Send Message</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Import a recipient audience and send personalized WhatsApp messages through a connected Evolution instance.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-xs font-medium shadow-sm">
+          <span className={`size-2 rounded-full ${connected.length ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+          {connected.length} connected instance{connected.length === 1 ? "" : "s"}
+        </div>
+      </div>
 
-        {type === "text" && <Textarea placeholder="Message" value={text} onChange={(e) => setText(e.target.value)} />}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><MessageSquare className="size-5" /></div>
+              <div><h2 className="font-semibold text-navy">Message setup</h2><p className="text-xs text-muted-foreground">Choose where the message comes from and what to send.</p></div>
+            </div>
 
-        {type === "media" && <>
-          <Textarea placeholder="Optional caption" value={text} onChange={(e) => setText(e.target.value)} />
-          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-4 text-sm hover:bg-surface"><FileUp className="size-5 text-primary" /><span className="min-w-0 flex-1 truncate">{file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : "Attach image, video, or document (max 8 MB)"}</span><input className="sr-only" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
-        </>}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">WhatsApp instance</label>
+                <Select value={instance} onValueChange={setInstance}>
+                  <SelectTrigger><SelectValue placeholder="Select connected instance" /></SelectTrigger>
+                  <SelectContent>{connected.map((session: any) => <SelectItem key={session.instanceName} value={session.instanceName}>{session.instanceName}{session.profileName ? ` · ${session.profileName}` : ""}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Message type</label>
+                <Select value={type} onValueChange={(value) => setType(value as MessageType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text message</SelectItem>
+                    <SelectItem value="media">Media message</SelectItem>
+                    <SelectItem value="buttons">Interactive buttons</SelectItem>
+                    <SelectItem value="list">Interactive list</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </section>
 
-        {(type === "buttons" || type === "list") && <>
-          <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <Textarea placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <Input placeholder="Footer (optional)" value={footer} onChange={(e) => setFooter(e.target.value)} />
-        </>}
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Users className="size-5" /></div>
+                <div><h2 className="font-semibold text-navy">Recipients</h2><p className="text-xs text-muted-foreground">Import XLSX, XLS or CSV with phone, name, company and custom fields.</p></div>
+              </div>
+              <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-semibold">{recipients.length}/{MAX_RECIPIENTS}</span>
+            </div>
+            <RecipientImporter value={recipients} onChange={setRecipients} max={MAX_RECIPIENTS} />
+          </section>
 
-        {type === "buttons" && <div className="space-y-2 rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">Buttons (max 3)</span><Button type="button" variant="outline" size="sm" disabled={buttons.length >= 3} onClick={() => setButtons([...buttons, newButton()])}><Plus className="mr-1 size-4" />Add</Button></div>{buttons.map((b, i) => <div className="flex gap-2" key={b.id}><Input placeholder={`Button ${i + 1} text`} value={b.displayText} onChange={(e) => setButtons(buttons.map((x) => x.id === b.id ? {...x, displayText: e.target.value} : x))} />{buttons.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setButtons(buttons.filter((x) => x.id !== b.id))}><Trash2 className="size-4" /></Button>}</div>)}</div>}
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileUp className="size-5" /></div>
+              <div><h2 className="font-semibold text-navy">Message content</h2><p className="text-xs text-muted-foreground">Use {{name}}, {{company}}, {{custom1}} and {{custom2}} for personalization.</p></div>
+            </div>
 
-        {type === "list" && <div className="space-y-3 rounded-lg border p-3"><Input placeholder="List button text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} /><div className="flex items-center justify-between"><span className="text-sm font-semibold">Sections</span><Button type="button" variant="outline" size="sm" onClick={() => setSections([...sections, newSection()])}><Plus className="mr-1 size-4" />Section</Button></div>{sections.map((section, si) => <div className="space-y-2 rounded-md border p-3" key={si}><div className="flex gap-2"><Input placeholder={`Section ${si + 1} title`} value={section.title || ""} onChange={(e) => setSections(sections.map((s, i) => i === si ? {...s, title: e.target.value} : s))} />{sections.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setSections(sections.filter((_, i) => i !== si))}><Trash2 className="size-4" /></Button>}</div>{section.rows.map((row, ri) => <div className="space-y-2 rounded border p-2" key={row.rowId}><div className="flex gap-2"><Input placeholder="Row title" value={row.title} onChange={(e) => setSections(sections.map((s, i) => i === si ? {...s, rows: s.rows.map((r, j) => j === ri ? {...r, title: e.target.value} : r)} : s))} /><Button type="button" variant="ghost" size="icon" onClick={() => setSections(sections.map((s, i) => i === si ? {...s, rows: s.rows.filter((_, j) => j !== ri)} : s))}><Trash2 className="size-4" /></Button></div><Input placeholder="Row description (optional)" value={row.description || ""} onChange={(e) => setSections(sections.map((s, i) => i === si ? {...s, rows: s.rows.map((r, j) => j === ri ? {...r, description: e.target.value} : r)} : s))} /></div>)}<Button type="button" variant="outline" size="sm" onClick={() => setSections(sections.map((s, i) => i === si ? {...s, rows: [...s.rows, newRow()]} : s))}><Plus className="mr-1 size-4" />Row</Button></div>)}</div>}
+            {type === "text" && <Textarea className="min-h-40 resize-y" placeholder="Write your message..." value={text} onChange={(e) => setText(e.target.value)} />}
 
-        <Button disabled={busy || !instance || !/^\d{8,15}$/.test(number)} onClick={() => void send()}><Send className="mr-2 size-4" />{busy ? "Sending…" : "Send message"}</Button>
-        {result && <p className="text-sm text-muted-foreground">{result}</p>}
+            {type === "media" && <div className="space-y-3">
+              <Textarea className="min-h-28 resize-y" placeholder="Optional caption. Personalization is supported." value={text} onChange={(e) => setText(e.target.value)} />
+              <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface/50 px-4 text-center transition hover:border-primary/50 hover:bg-primary/5">
+                <FileUp className="mb-2 size-7 text-primary" />
+                <span className="text-sm font-medium">{file ? file.name : "Choose image, video or document"}</span>
+                <span className="mt-1 text-xs text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Maximum file size: 8 MB"}</span>
+                <input className="sr-only" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              </label>
+            </div>}
+
+            {(type === "buttons" || type === "list") && <div className="space-y-3">
+              <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Textarea placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Input placeholder="Footer (optional)" value={footer} onChange={(e) => setFooter(e.target.value)} />
+            </div>}
+
+            {type === "buttons" && <div className="mt-4 space-y-3 rounded-xl border bg-surface/40 p-4">
+              <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">Buttons</p><p className="text-xs text-muted-foreground">1–3 quick reply buttons</p></div><Button type="button" variant="outline" size="sm" disabled={buttons.length >= 3} onClick={() => setButtons([...buttons, newButton()])}><Plus className="mr-1 size-4" />Add</Button></div>
+              {buttons.map((button, index) => <div className="flex gap-2" key={button.id}><Input placeholder={`Button ${index + 1} text`} value={button.displayText} onChange={(e) => setButtons(buttons.map((item) => item.id === button.id ? { ...item, displayText: e.target.value } : item))} />{buttons.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setButtons(buttons.filter((item) => item.id !== button.id))}><Trash2 className="size-4" /></Button>}</div>)}
+            </div>}
+
+            {type === "list" && <div className="mt-4 space-y-4 rounded-xl border bg-surface/40 p-4">
+              <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">List menu</p><p className="text-xs text-muted-foreground">Up to 10 rows across sections</p></div><Input className="max-w-40" placeholder="Button text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} /></div>
+              {sections.map((section, si) => <div className="space-y-2 rounded-lg border bg-white p-3" key={si}>
+                <div className="flex gap-2"><Input placeholder={`Section ${si + 1} title`} value={section.title || ""} onChange={(e) => updateSection(si, { title: e.target.value })} />{sections.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setSections(sections.filter((_, index) => index !== si))}><Trash2 className="size-4" /></Button>}</div>
+                {section.rows.map((row, ri) => <div className="space-y-2 rounded-md border p-2" key={row.rowId}><div className="flex gap-2"><Input placeholder="Row title" value={row.title} onChange={(e) => updateRow(si, ri, { title: e.target.value })} /><Button type="button" variant="ghost" size="icon" onClick={() => updateSection(si, { rows: section.rows.filter((_, index) => index !== ri) })}><Trash2 className="size-4" /></Button></div><Input placeholder="Row description (optional)" value={row.description || ""} onChange={(e) => updateRow(si, ri, { description: e.target.value })} /></div>)}
+                <Button type="button" variant="outline" size="sm" onClick={() => updateSection(si, { rows: [...section.rows, newRow()] })}><Plus className="mr-1 size-4" />Row</Button>
+              </div>)}
+              <Button type="button" variant="outline" size="sm" onClick={() => setSections([...sections, newSection()])}><Plus className="mr-1 size-4" />Section</Button>
+            </div>}
+          </section>
+        </div>
+
+        <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <h2 className="font-semibold text-navy">Send controls</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Messages are sent sequentially to protect your WhatsApp instance.</p>
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-medium">Delay between recipients</label>
+              <div className="flex items-center gap-2"><Input type="number" min={MIN_DELAY_MS} max={10000} step={100} value={delayMs} onChange={(e) => setDelayMs(e.target.value)} /><span className="text-xs text-muted-foreground">ms</span></div>
+              <p className="text-xs text-muted-foreground">Minimum {MIN_DELAY_MS} ms.</p>
+            </div>
+            <Button className="mt-5 w-full" size="lg" disabled={busy || !instance || !recipients.length} onClick={() => void send()}><Send className="mr-2 size-4" />{busy ? `Sending ${progress.sent + progress.failed}/${progress.total}…` : `Send to ${recipients.length || 0} recipients`}</Button>
+            {busy && <div className="mt-4 space-y-2"><div className="h-2 overflow-hidden rounded-full bg-surface"><div className="h-full bg-primary transition-all" style={{ width: `${progress.total ? ((progress.sent + progress.failed) / progress.total) * 100 : 0}%` }} /></div><div className="flex justify-between text-xs text-muted-foreground"><span>{progress.sent} sent</span><span>{progress.failed} failed</span></div></div>}
+            {result && <div className="mt-4 flex gap-2 rounded-lg border bg-surface p-3 text-sm"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" /><span>{result}</span></div>}
+          </section>
+
+          <section className="rounded-2xl border border-border bg-navy p-5 text-white shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Personalization</p>
+            <h3 className="mt-1 font-semibold">Make every message personal</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              {["{{name}}", "{{company}}", "{{custom1}}", "{{custom2}}"].map((token) => <code key={token} className="rounded-md bg-white/10 px-2 py-2 text-white/80">{token}</code>)}
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
