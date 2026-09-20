@@ -57,9 +57,9 @@ export const sessionsApi = {
   remove: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}`, { method: 'DELETE' }),
   sendText: (instance: string, number: string, text: string, options: { linkPreview?: boolean; delayMs?: number } = {}) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, { method: 'POST', body: JSON.stringify({ number, text, ...options }) }),
-  sendButtons: (instance: string, number: string, payload: { title: string; description?: string; footer?: string; buttons: ButtonPayload[] }) =>
+  sendButtons: (instance: string, number: string, payload: { text: string; buttons: ButtonPayload[] }) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-buttons`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
-  sendList: (instance: string, number: string, payload: { title: string; description?: string; footerText?: string; buttonText: string; sections: ListSection[] }) =>
+  sendList: (instance: string, number: string, payload: { text: string; buttonText: string; sections: ListSection[] }) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-list`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
   sendMedia: (instance: string, number: string, media: MediaPayload, caption = '', delayMs = 0) =>
     request(`/api/sessions/${encodeURIComponent(instance)}/send-media`, {
