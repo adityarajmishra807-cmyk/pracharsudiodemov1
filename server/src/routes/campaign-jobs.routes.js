@@ -207,7 +207,9 @@ campaignJobsRouter.get('/analytics', requirePermission('analytics'), async (req,
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.get('/queue/status', requirePermission('campaigns'), (_req, res) => res.json({ queueSize: getQueueSize() }));
+campaignJobsRouter.get('/queue/status', requirePermission('campaigns'), async (_req, res, next) => {
+  try { return res.json({ queueSize: await getQueueSize() }); } catch (error) { return next(error); }
+});
 
 campaignJobsRouter.post('/:id/retry-failed', requirePermission('campaigns'), async (req, res, next) => {
   try {
