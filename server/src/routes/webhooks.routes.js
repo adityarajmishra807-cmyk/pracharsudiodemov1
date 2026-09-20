@@ -21,7 +21,7 @@ const STATUS_MAP = {
 };
 
 function validWebhook(req) {
-  const expected = config.evolutionKey;
+  const expected = config.webhookSecret || config.evolutionKey;
   if (!expected) return false;
   const payloadKey = req.body?.apikey || req.body?.apiKey;
   const headerKey = req.get('x-api-key') || req.get('x-webhook-secret') || String(req.get('authorization') || '').replace(/^Bearer\s+/i, '');
