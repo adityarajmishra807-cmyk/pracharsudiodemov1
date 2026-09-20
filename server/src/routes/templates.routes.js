@@ -23,7 +23,14 @@ function validate(body) {
   if (!['draft', 'approved', 'paused'].includes(status)) {
     throw Object.assign(new Error('Unsupported template status.'), { status: 400 });
   }
-  return { name, type, data: { ...data, category, status } };
+  const {
+    title: _legacyTitle,
+    description: _legacyDescription,
+    footer: _legacyFooter,
+    footerText: _legacyFooterText,
+    ...cleanData
+  } = data;
+  return { name, type, data: { ...cleanData, category, status } };
 }
 templatesRouter.get('/', requirePermission('templatesUse'), async (_req,res,next)=>{ try { const {rows}=await pool.query('SELECT * FROM templates ORDER BY updated_at DESC'); res.json(rows.map(mapTemplate)); } catch(e){next(e);} });
 templatesRouter.post('/', requirePermission('templatesManage'), async (req,res,next)=>{ try { const input=validate(req.body); const id=`tpl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`; const {rows}=await pool.query('INSERT INTO templates(id,name,type,data) VALUES($1,$2,$3,$4::jsonb) RETURNING *',[id,input.name,input.type,JSON.stringify(input.data)]); res.status(201).json(mapTemplate(rows[0])); } catch(e){next(e);} });
