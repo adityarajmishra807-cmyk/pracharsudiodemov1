@@ -16,10 +16,15 @@ function personalize(template, recipient) {
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function messageIdFrom(response) { return response?.key?.id || response?.data?.key?.id || response?.message?.key?.id || response?.data?.message?.key?.id; }
 
-export function enqueueCampaign(id) {
-  if (!queue.includes(id)) queue.push(id);
-  void enqueueCampaignJob(id).catch((error) => console.error('[campaign-worker] queue persistence failed:', error));
-  void drain();
+export async function enqueueCampaign(id) {
+  try {
+    await enqueueCampaignJob(id);
+    if (!queue.includes(id)) queue.push(id);
+    void drain();
+  } catch (error) {
+    console.error('[campaign-worker] queue persistence failed:', error);
+    throw error;
+  }
 }
 
 export async function getQueueSize() {
@@ -27,7 +32,7 @@ export async function getQueueSize() {
   return Number(stats.queued || 0) + Number(stats.running || 0);
 }
 export function pauseCampaign(id) { controls.set(id, 'paused'); }
-export function resumeCampaign(id) { controls.set(id, 'resumed'); enqueueCampaign(id); }
+export function resumeCampaign(id) { controls.set(id, 'resumed'); void enqueueCampaign(id).catch((error) => console.error('[campaign-worker] resume enqueue failed:', error)); }
 export function cancelCampaign(id) { controls.set(id, 'cancelled'); }
 
 async function processCampaign(id) {
