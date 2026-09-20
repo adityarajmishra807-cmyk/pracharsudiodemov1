@@ -287,7 +287,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       memberName,
       can: (key) => (isOwner ? true : !!currentMember?.permissions[key]),
       signIn: (session) => patch((s) => ({ ...s, session })),
-      signOut: () => patch((s) => ({ ...s, session: null })),
+      signOut: () => { clearAuthToken(); patch((s) => ({ ...s, session: null })); },
 
       addMember: (data) => {
         const member: Member = { ...data, id: uid(), createdAt: now() };
