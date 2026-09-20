@@ -19,8 +19,9 @@ function validateCampaign(body) {
   }
   const instance = String(body?.instance || '').trim();
   if (!instance) throw Object.assign(new Error('Instance is required.'), { status: 400 });
+  const audienceId = String(body?.audienceId || '').trim();
   const recipients = Array.isArray(body?.recipients) ? body.recipients : [];
-  if (!recipients.length) throw Object.assign(new Error('At least one recipient is required.'), { status: 400 });
+  if (!recipients.length && !audienceId) throw Object.assign(new Error('Recipients or an audience is required.'), { status: 400 });
   if (recipients.length > MAX_RECIPIENTS) throw Object.assign(new Error(`A campaign is limited to ${MAX_RECIPIENTS} recipients.`), { status: 400 });
   const delayMs = Math.max(MIN_DELAY_MS, Math.min(Number.isFinite(Number(body?.delayMs)) ? Number(body.delayMs) : 1500, MAX_DELAY_MS));
   const payload = body?.payload && typeof body.payload === 'object' ? body.payload : {};
@@ -37,7 +38,7 @@ function validateCampaign(body) {
       throw Object.assign(new Error('List campaign requires a title, menu button and 1–10 rows.'), { status: 400 });
     }
   }
-  return { type, instance, recipients, delayMs, payload };
+  return { type, instance, recipients, audienceId, delayMs, payload };
 }
 
 campaignJobsRouter.get('/', async (req, res, next) => {
@@ -267,6 +268,32 @@ campaignJobsRouter.post('/:id/cancel', async (req, res, next) => {
 campaignJobsRouter.post('/', async (req, res, next) => {
   try {
     const input = validateCampaign(req.body);
+    if (input.audienceId) {
+      const audience = await pool.query(
+        `SELECT a.id
+         FROM audiences a
+         WHERE a.id = $1
+         LIMIT 1`,
+        [input.audienceId],
+      );
+      if (!audience.rows[0]) {
+        throw Object.assign(new Error('Audience not found.'), { status: 404 });
+      }
+      const audienceRecipients = await pool.query(
+        `SELECT recipient_index, recipient
+         FROM audience_recipients
+         WHERE audience_id = $1
+         ORDER BY recipient_index`,
+        [input.audienceId],
+      );
+      input.recipients = audienceRecipients.rows.map((row) => row.recipient || {});
+    }
+    if (!input.recipients.length) {
+      throw Object.assign(new Error('The selected audience has no recipients.'), { status: 400 });
+    }
+    if (input.recipients.length > MAX_RECIPIENTS) {
+      throw Object.assign(new Error(`A campaign is limited to ${MAX_RECIPIENTS} recipients. The selected audience contains ${input.recipients.length}.`), { status: 400 });
+    }
     await enforceCampaignSafety(input);
     const campaign = await createCampaign({ ...input, name: req.body?.name });
     enqueueCampaign(campaign.id);
