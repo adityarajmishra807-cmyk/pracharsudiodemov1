@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDate, useStore } from "@/lib/store";
 import { campaignsApi, type Campaign } from "@/lib/campaigns-api";
+import { audiencesApi, type Audience } from "@/lib/audiences-api";
 import { sessionsApi, type Session } from "@/lib/sessions-api";
 import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
 
@@ -43,6 +44,9 @@ function CampaignsPage() {
   const { can } = useStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [audiences, setAudiences] = useState<Audience[]>([]);
+  const [audienceId, setAudienceId] = useState("");
+  const [audienceBusy, setAudienceBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -62,9 +66,10 @@ function CampaignsPage() {
 
   const load = async () => {
     try {
-      const [items, available] = await Promise.all([campaignsApi.list(), sessionsApi.list()]);
+      const [items, available, savedAudiences] = await Promise.all([campaignsApi.list(), sessionsApi.list(), audiencesApi.list()]);
       setCampaigns(items);
       setSessions(available);
+      setAudiences(savedAudiences);
       if (!instance && available.length) setInstance(available[0].instanceName || "");
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load campaign data"); }
   };
@@ -80,7 +85,7 @@ function CampaignsPage() {
   const requiresList = ["list", "media-list"].includes(type);
 
   const resetComposer = () => {
-    setName(""); setRecipientRows([]); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
+    setName(""); setRecipientRows([]); setAudienceId(""); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
     setCaption(""); setMedia(null); setTitle(""); setDescription(""); setFooter(""); setButtonText("View options");
     setButtons([emptyButton()]); setSections([emptySection()]);
   };
@@ -89,6 +94,30 @@ function CampaignsPage() {
     setButtons((items) => items.map((item, i) => i === index ? { ...item, ...patch } : item));
   const updateRow = (sectionIndex: number, rowIndex: number, patch: Partial<RowDraft>) =>
     setSections((items) => items.map((s, i) => i === sectionIndex ? { ...s, rows: s.rows.map((r, j) => j === rowIndex ? { ...r, ...patch } : r) } : s));
+
+  const selectAudience = async (id: string) => {
+    setAudienceId(id);
+    if (!id) {
+      setRecipientRows([]);
+      return;
+    }
+    setAudienceBusy(true);
+    try {
+      const audience = await audiencesApi.get(id);
+      if (audience.total > 250) {
+        setRecipientRows([]);
+        toast.error(`This audience contains ${audience.total} recipients. Campaigns currently support up to 250.`);
+        return;
+      }
+      setRecipientRows(audience.recipients as RecipientRow[]);
+      toast.success(`Loaded ${audience.total} recipients from ${audience.name}.`);
+    } catch (e) {
+      setRecipientRows([]);
+      toast.error(e instanceof Error ? e.message : "Could not load audience.");
+    } finally {
+      setAudienceBusy(false);
+    }
+  };
 
   const create = async () => {
     const list = recipientRows;
@@ -116,7 +145,14 @@ function CampaignsPage() {
         payload.sections = sections.map((s) => ({ title: s.title.trim(), rows: s.rows.map((r) => ({ rowId: r.rowId.trim(), title: r.title.trim(), description: r.description.trim() })) }));
       }
       if (type === "media-buttons" || type === "media-list") payload.media = media;
-      await campaignsApi.create({ name: name.trim(), type, instance, recipients: list, delayMs: Math.max(1500, Math.min(10000, Number(delayMs) || 1500)), payload });
+      await campaignsApi.create({
+        name: name.trim(),
+        type,
+        instance,
+        ...(audienceId ? { audienceId } : { recipients: list }),
+        delayMs: Math.max(1500, Math.min(10000, Number(delayMs) || 1500)),
+        payload,
+      });
       toast.success("Campaign queued.");
       setOpen(false); resetComposer(); await load();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Campaign creation failed"); }
@@ -154,7 +190,29 @@ function CampaignsPage() {
             <div><Label>Evolution instance</Label><Select value={instance} onValueChange={setInstance}><SelectTrigger><SelectValue placeholder="Select instance" /></SelectTrigger><SelectContent>{connected.map((s) => <SelectItem key={s.instanceName} value={s.instanceName || ""}>{s.instanceName}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div><Label>Message type</Label><Select value={type} onValueChange={(v) => setType(v as CampaignType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["text","media","media-text","buttons","list","media-buttons","media-list"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label>Recipients</Label><RecipientImporter value={recipientRows} onChange={setRecipientRows} max={250} /></div>
+          <div className="space-y-3">
+            <Label>Recipients</Label>
+            <div className="rounded-md border p-3 space-y-3">
+              <div>
+                <Label>Saved audience</Label>
+                <Select value={audienceId || "__manual__"} onValueChange={(value) => void selectAudience(value === "__manual__" ? "" : value)}>
+                  <SelectTrigger><SelectValue placeholder="Import recipients manually" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__manual__">Manual import</SelectItem>
+                    {audiences.map((audience) => (
+                      <SelectItem key={audience.id} value={audience.id}>
+                        {audience.name} · {audience.total} recipients
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {audienceBusy && <p className="mt-1 text-xs text-muted-foreground">Loading audience…</p>}
+                {audienceId && !audienceBusy && <p className="mt-1 text-xs text-muted-foreground">Recipients are snapshotted into this campaign when it is queued.</p>}
+              </div>
+              {!audienceId && <RecipientImporter value={recipientRows} onChange={setRecipientRows} max={250} />}
+              {audienceId && !!recipientRows.length && <p className="text-sm text-muted-foreground">{recipientRows.length} recipients loaded from the selected audience.</p>}
+            </div>
+          </div>
 
           {type === "text" && <div><Label>Message</Label><Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello {{name}}" /></div>}
 
