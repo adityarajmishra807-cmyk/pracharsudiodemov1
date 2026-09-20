@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { config } from '../config.js';
-import { connectInstance, createInstance, deleteInstance, listInstances, logoutInstance, restartInstance, sendMedia, sendText, setWebhook } from '../services/evolution.service.js';
+import { connectInstance, createInstance, deleteInstance, listInstances, logoutInstance, restartInstance, sendButtons, sendList, sendMedia, sendText, setWebhook } from '../services/evolution.service.js';
 
 export const sessionsRouter = Router();
 const instance = (req) => String(req.params.instance || '').trim();
@@ -52,6 +52,20 @@ sessionsRouter.post('/:instance/send-media', async (req, res, next) => {
     const number = String(req.body?.number || '').trim();
     const media = req.body?.media;
     res.json(await sendMedia(instance(req), number, media, { caption: req.body?.caption, delayMs: req.body?.delayMs }));
+  } catch (error) { next(error); }
+});
+
+sessionsRouter.post('/:instance/send-buttons', async (req, res, next) => {
+  try {
+    const number = String(req.body?.number || '').trim();
+    res.json(await sendButtons(instance(req), number, req.body || {}));
+  } catch (error) { next(error); }
+});
+
+sessionsRouter.post('/:instance/send-list', async (req, res, next) => {
+  try {
+    const number = String(req.body?.number || '').trim();
+    res.json(await sendList(instance(req), number, req.body || {}));
   } catch (error) { next(error); }
 });
 
