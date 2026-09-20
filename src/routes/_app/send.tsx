@@ -227,7 +227,7 @@ function SendPage() {
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center gap-3">
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileUp className="size-5" /></div>
-              <div><h2 className="font-semibold text-navy">Message content</h2><p className="text-xs text-muted-foreground">Use {{name}}, {{company}}, {{custom1}} and {{custom2}} for personalization.</p></div>
+              <div><h2 className="font-semibold text-navy">Message content</h2><p className="text-xs text-muted-foreground">Use {{"{{name}}" }}, {{"{{company}}" }}, {{"{{custom1}}" }} and {{"{{custom2}}" }} for personalization.</p></div>
             </div>
 
             {type === "text" && <Textarea className="min-h-40 resize-y" placeholder="Write your message..." value={text} onChange={(e) => setText(e.target.value)} />}
