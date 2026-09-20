@@ -16,6 +16,7 @@ import { campaignsApi, type Campaign } from "@/lib/campaigns-api";
 import { audiencesApi, type Audience } from "@/lib/audiences-api";
 import { sessionsApi, type Session } from "@/lib/sessions-api";
 import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
+import { templatesApi, type Template } from "@/lib/templates-api";
 
 export const Route = createFileRoute("/_app/campaigns")({
   head: () => ({ meta: [{ title: "Campaigns — Prachar Studio" }, { name: "description", content: "Persistent WhatsApp campaign manager." }] }),
@@ -45,8 +46,11 @@ function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [audiences, setAudiences] = useState<Audience[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateId, setTemplateId] = useState("");
   const [audienceId, setAudienceId] = useState("");
   const [audienceBusy, setAudienceBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -66,10 +70,11 @@ function CampaignsPage() {
 
   const load = async () => {
     try {
-      const [items, available, savedAudiences] = await Promise.all([campaignsApi.list(), sessionsApi.list(), audiencesApi.list()]);
+      const [items, available, savedAudiences, savedTemplates] = await Promise.all([campaignsApi.list(), sessionsApi.list(), audiencesApi.list(), templatesApi.list()]);
       setCampaigns(items);
       setSessions(available);
       setAudiences(savedAudiences);
+      setTemplates(savedTemplates);
       if (!instance && available.length) setInstance(available[0].instanceName || "");
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load campaign data"); }
   };
@@ -85,7 +90,7 @@ function CampaignsPage() {
   const requiresList = ["list", "media-list"].includes(type);
 
   const resetComposer = () => {
-    setName(""); setRecipientRows([]); setAudienceId(""); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
+    setName(""); setRecipientRows([]); setAudienceId(""); setTemplateId(""); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
     setCaption(""); setMedia(null); setTitle(""); setDescription(""); setFooter(""); setButtonText("View options");
     setButtons([emptyButton()]); setSections([emptySection()]);
   };
@@ -116,6 +121,55 @@ function CampaignsPage() {
       toast.error(e instanceof Error ? e.message : "Could not load audience.");
     } finally {
       setAudienceBusy(false);
+    }
+  };
+
+  const selectTemplate = async (id: string) => {
+    setTemplateId(id);
+    if (!id) return;
+    const template = templates.find((item) => item.id === id);
+    if (!template) return;
+    setTemplateBusy(true);
+    try {
+      const data = template.data || {};
+      const nextType = template.type as CampaignType;
+      setType(nextType);
+      setName((current) => current.trim() ? current : template.name);
+      if (nextType === "text") setText(String(data.text || ""));
+      if (nextType === "media-text") {
+        setCaption(String(data.caption || ""));
+        if (data.media && typeof data.media === "object") setMedia(data.media as Record<string, string>);
+      }
+      if (["media", "media-buttons", "media-list"].includes(nextType) && data.media && typeof data.media === "object") {
+        setMedia(data.media as Record<string, string>);
+      }
+      if (["buttons", "media-buttons"].includes(nextType)) {
+        setTitle(String(data.title || ""));
+        setDescription(String(data.description || ""));
+        setFooter(String(data.footer || ""));
+        const parsed = Array.isArray(data.buttons) ? data.buttons : (() => {
+          try { return JSON.parse(String(data.buttonsJson || "[]")); } catch { return []; }
+        })();
+        if (Array.isArray(parsed) && parsed.length) setButtons(parsed.map((b: Record<string, unknown>) => ({
+          id: String(b.id || ""), displayText: String(b.displayText || ""), type: b.url ? "url" : b.phoneNumber ? "phone" : b.copyCode ? "copy" : "quickReply",
+          ...(b.url ? { url: String(b.url) } : {}), ...(b.phoneNumber ? { phoneNumber: String(b.phoneNumber) } : {}), ...(b.copyCode ? { copyCode: String(b.copyCode) } : {}),
+        })));
+      }
+      if (["list", "media-list"].includes(nextType)) {
+        setTitle(String(data.title || ""));
+        setDescription(String(data.description || ""));
+        setFooter(String(data.footerText || data.footer || ""));
+        setButtonText(String(data.buttonText || "View options"));
+        const parsed = Array.isArray(data.sections) ? data.sections : (() => {
+          try { return JSON.parse(String(data.sectionsJson || "[]")); } catch { return []; }
+        })();
+        if (Array.isArray(parsed) && parsed.length) setSections(parsed.map((s: Record<string, unknown>) => ({
+          title: String(s.title || ""), rows: Array.isArray(s.rows) ? s.rows.map((row: Record<string, unknown>) => ({ rowId: String(row.rowId || ""), title: String(row.title || ""), description: String(row.description || "") })) : [emptyRow()],
+        })));
+      }
+      toast.success(`Loaded template: ${template.name}`);
+    } finally {
+      setTemplateBusy(false);
     }
   };
 
@@ -188,6 +242,17 @@ function CampaignsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div><Label>Campaign name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer offer" /></div>
             <div><Label>Evolution instance</Label><Select value={instance} onValueChange={setInstance}><SelectTrigger><SelectValue placeholder="Select instance" /></SelectTrigger><SelectContent>{connected.map((s) => <SelectItem key={s.instanceName} value={s.instanceName || ""}>{s.instanceName}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          <div className="space-y-2">
+            <Label>Template</Label>
+            <Select value={templateId || "__none__"} onValueChange={(value) => void selectTemplate(value === "__none__" ? "" : value)}>
+              <SelectTrigger><SelectValue placeholder="Start from a saved template" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No template</SelectItem>
+                {templates.filter((t) => t.status !== "paused").map((t) => <SelectItem key={t.id} value={t.id}>{t.name} · {t.type}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {templateBusy && <p className="text-xs text-muted-foreground">Loading template…</p>}
           </div>
           <div><Label>Message type</Label><Select value={type} onValueChange={(v) => setType(v as CampaignType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["text","media","media-text","buttons","list","media-buttons","media-list"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-3">
