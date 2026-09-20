@@ -14,7 +14,6 @@ import { templatesRouter } from './routes/templates.routes.js';
 import { webhooksRouter } from './routes/webhooks.routes.js';
 import { audiencesRouter } from './routes/audiences.routes.js';
 import { crmRouter } from './routes/crm.routes.js';
-import { inboxRouter } from './routes/inbox.routes.js';
 import { automationRouter } from './routes/automation.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { workspaceRouter } from './routes/workspace.routes.js';
@@ -27,8 +26,8 @@ registerMiddleware(app);
 app.get('/api', (_req, res) => res.json({
   ok: true,
   name: 'Evolution WhatsApp Manager API',
-  version: '1.7.0',
-  features: { sessions: true, textCampaigns: true, mediaCampaigns: true, interactiveCampaigns: true, persistentCampaigns: true },
+  version: '1.7.1',
+  features: { sessions: true, textMessages: true, mediaMessages: true, textCampaigns: true, mediaCampaigns: true, interactiveCampaigns: true, persistentCampaigns: true },
 }));
 app.use('/api/auth', authRouter);
 app.use('/api/health', healthRouter);
@@ -39,7 +38,6 @@ app.use('/api/templates', templatesRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/audiences', audiencesRouter);
 app.use('/api/crm', crmRouter);
-app.use('/api/inbox', inboxRouter);
 app.use('/api/automations', automationRouter);
 app.use('/api/workspace', workspaceRouter);
 
