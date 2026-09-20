@@ -198,11 +198,10 @@ export async function sendMedia(instance, number, media, options = {}) {
 
 export async function sendButtons(instance, number, payload) {
   const cleanNumberValue = cleanNumber(number);
-  const title = String(payload?.title || '').trim();
   const buttons = Array.isArray(payload?.buttons) ? payload.buttons : [];
+  const message = String(payload?.text || '').trim();
   if (!cleanNumberValue) throw new EvolutionError('Recipient must be a phone number, not a WhatsApp JID.', 400);
   if (!/^\d{8,15}$/.test(cleanNumberValue)) throw new EvolutionError('Recipient phone number must contain 8–15 digits.', 400);
-  if (!title) throw new EvolutionError('Button title is required.', 400);
   if (!buttons.length || buttons.length > 3) throw new EvolutionError('Buttons require 1–3 items.', 400);
 
   const normalizedButtons = buttons.map((button, index) => ({
@@ -221,9 +220,7 @@ export async function sendButtons(instance, number, payload) {
     url: `/message/sendButtons/${encodeURIComponent(instance)}`,
     data: {
       number: cleanNumberValue,
-      title,
-      description: String(payload?.description || '').trim(),
-      footer: String(payload?.footer || payload?.footerText || '').trim(),
+      text: message,
       buttons: normalizedButtons,
     },
   });
