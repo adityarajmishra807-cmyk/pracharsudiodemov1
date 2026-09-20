@@ -12,7 +12,7 @@ export type Analytics = {
   }>;
 };
 
-const base = () => String(import.meta.env.VITE_WHATSAPP_API_URL || window.location.origin).replace(/\/+$/, "");
+
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(base() + path, { headers: { Accept: "application/json" }, cache: "no-store" });
