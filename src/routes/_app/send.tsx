@@ -359,23 +359,19 @@ function SendPage() {
               </div>
             </div>
 
-            {type === "text" && (
-              <Textarea
-                className="min-h-40 resize-y"
-                placeholder="Write your message..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
-            )}
+            <Textarea
+              className={`resize-y ${isMediaType ? "min-h-28" : "min-h-40"}`}
+              placeholder={
+                isMediaType
+                  ? "Write your message or caption..."
+                  : "Write your message..."
+              }
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
 
             {isMediaType && (
-              <div className="space-y-3">
-                <Textarea
-                  className="min-h-28 resize-y"
-                  placeholder="Optional caption. Personalization is supported."
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                />
+              <div className="mt-3">
                 <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface/50 px-4 text-center transition hover:border-primary/50 hover:bg-primary/5">
                   <FileUp className="mb-2 size-7 text-primary" />
                   <span className="text-sm font-medium">
@@ -394,15 +390,6 @@ function SendPage() {
                   />
                 </label>
               </div>
-            )}
-
-            {(isButtonType || isListType) && (
-              <Textarea
-                className="min-h-28 resize-y"
-                placeholder="Write the message text..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
             )}
 
             {isButtonType && (
