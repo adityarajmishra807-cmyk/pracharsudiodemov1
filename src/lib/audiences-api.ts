@@ -1,3 +1,4 @@
+import { apiRequest } from "./api";
 export type Audience = {
   id: string;
   name: string;
@@ -13,20 +14,7 @@ export type AudienceDetail = Audience & {
 
 
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(base() + path, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers || {}),
-    },
-    cache: "no-store",
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
-  return body as T;
-}
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> { return apiRequest<T>(path, init); }
 
 export const audiencesApi = {
   list: () => request<Audience[]>("/api/audiences"),
