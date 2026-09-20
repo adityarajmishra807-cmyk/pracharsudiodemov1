@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2, FileUp, MessageSquare, Plus, Send, Trash2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
   type MediaPayload,
 } from "@/lib/sessions-api";
 import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
+import { templatesApi, type Template } from "@/lib/templates-api";
 
 export const Route = createFileRoute("/_app/send")({ component: SendPage });
 
@@ -34,6 +35,12 @@ function mediaType(file: File): MediaPayload["mediatype"] | null {
   if (file.type.startsWith("video/")) return "video";
   if (file.type.startsWith("application/") || file.type.startsWith("text/")) return "document";
   return null;
+}
+
+async function dataUrlToFile(dataUrl: string, fileName: string, mimeType: string) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], fileName || "template-media", { type: mimeType || blob.type || "application/octet-stream" });
 }
 
 function fileToBase64(file: File) {
@@ -68,6 +75,8 @@ function SendPage() {
   );
 
   const [instance, setInstance] = useState("");
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
   const [type, setType] = useState<MessageType>("text");
   const [text, setText] = useState("Hello {{name}},\n\nWe have an offer for {{company}}.");
@@ -90,6 +99,43 @@ function SendPage() {
     custom2: "North",
   };
   const previewText = personalize(text, previewRecipient);
+
+  useEffect(() => {
+    void templatesApi.list().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
+
+  const applyTemplate = async (id: string) => {
+    setSelectedTemplate(id);
+    const template = templates.find((item) => item.id === id);
+    if (!template) return;
+    const data = template.data && typeof template.data === "object" ? template.data : {};
+    setType(template.type);
+    setText(String(data.text || data.caption || ""));
+    setButtonText(String(data.buttonText || "Choose"));
+    try {
+      const parsedButtons = typeof data.buttonsJson === "string" ? JSON.parse(data.buttonsJson) : data.buttons;
+      if (Array.isArray(parsedButtons) && parsedButtons.length) {
+        setButtons(parsedButtons.slice(0, 3).map((button: any, index: number) => ({
+          id: String(button.id || index + 1),
+          displayText: String(button.displayText || button.text || ""),
+        })));
+      }
+    } catch { setButtons([newButton()]); }
+    try {
+      const parsedSections = typeof data.sectionsJson === "string" ? JSON.parse(data.sectionsJson) : data.sections;
+      if (Array.isArray(parsedSections) && parsedSections.length) setSections(parsedSections);
+    } catch { setSections([newSection()]); }
+    const media = String(data.mediaBase64 || "");
+    if (media) {
+      try {
+        const restored = await dataUrlToFile(media, String(data.mediaFileName || "template-media"), String(data.mediaMimeType || ""));
+        if (restored.size <= MAX_MEDIA_BYTES) setFile(restored);
+        else toast.error("The template media is larger than the 8 MB send limit.");
+      } catch { toast.error("Could not restore template media."); }
+    } else {
+      setFile(null);
+    }
+  };
 
   const updateSection = (si: number, patch: Partial<ListSection>) =>
     setSections((items) =>
@@ -608,7 +654,18 @@ function SendPage() {
                 <p className="mt-1 text-right text-[10px] text-muted-foreground">now</p>
               </div>
             </div>
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Load saved template</label>
+              <Select value={selectedTemplate} onValueChange={(value) => void applyTemplate(value)}>
+                <SelectTrigger><SelectValue placeholder="Select a saved template" /></SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name} · {template.type}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </section>
+
 
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h2 className="font-semibold text-navy">Send controls</h2>
