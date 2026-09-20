@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_app/send")({ component: SendPage });
 const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 const MAX_RECIPIENTS = 250;
 const MIN_DELAY_MS = 1500;
-type MessageType = "text" | "media" | "buttons" | "list";
+type MessageType = "text" | "media" | "buttons" | "list" | "media-buttons" | "media-list";
 
 function mediaType(file: File): MediaPayload["mediatype"] | null {
   if (file.type.startsWith("image/")) return "image";
@@ -67,6 +67,11 @@ function SendPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ sent: 0, failed: 0, total: 0 });
   const [result, setResult] = useState("");
+  const isMediaType = ["media", "media-buttons", "media-list"].includes(type);
+  const isButtonType = ["buttons", "media-buttons"].includes(type);
+  const isListType = ["list", "media-list"].includes(type);
+  const previewRecipient = recipients[0] || { phone: "919999999999", name: "Rahul", company: "Acme Ltd", custom1: "VIP", custom2: "North" };
+  const previewText = personalize(text, previewRecipient);
 
   const updateSection = (si: number, patch: Partial<ListSection>) =>
     setSections((items) => items.map((item, index) => index === si ? { ...item, ...patch } : item));
@@ -81,12 +86,12 @@ function SendPage() {
     if (!recipients.length) return toast.error("Import at least one recipient.");
     if (recipients.length > MAX_RECIPIENTS) return toast.error(`Maximum ${MAX_RECIPIENTS} recipients are allowed.`);
     if (type === "text" && !text.trim()) return toast.error("Message text is required.");
-    if (type === "media" && !file) return toast.error("Attach a file first.");
+    if (isMediaType && !file) return toast.error("Attach a file first.");
     if (file && file.size > MAX_MEDIA_BYTES) return toast.error("Media must be 8 MB or smaller.");
 
     const mediatype = file ? mediaType(file) : null;
-    if (type === "media" && !mediatype) return toast.error("Unsupported media type.");
-    if (type === "buttons" && (!title.trim() || buttons.filter((b) => b.displayText.trim()).length < 1 || buttons.filter((b) => b.displayText.trim()).length > 3)) {
+    if (isMediaType && !mediatype) return toast.error("Unsupported media type.");
+    if (isButtonType && (!title.trim() || buttons.filter((b) => b.displayText.trim()).length < 1 || buttons.filter((b) => b.displayText.trim()).length > 3)) {
       return toast.error("Add a title and 1–3 buttons.");
     }
 
@@ -94,7 +99,7 @@ function SendPage() {
       .map((section) => ({ title: section.title?.trim(), rows: section.rows.filter((row) => row.title.trim()).map((row, i) => ({ title: row.title.trim(), rowId: row.rowId || String(i + 1), description: row.description?.trim() })) }))
       .filter((section) => section.rows.length);
     const rowCount = validSections.reduce((count, section) => count + section.rows.length, 0);
-    if (type === "list" && (!title.trim() || !buttonText.trim() || !rowCount || rowCount > 10)) {
+    if (isListType && (!title.trim() || !buttonText.trim() || !rowCount || rowCount > 10)) {
       return toast.error("Add a list title, menu button and 1–10 rows.");
     }
 
@@ -113,14 +118,14 @@ function SendPage() {
           const number = recipient.phone;
           if (type === "text") {
             await sessionsApi.sendText(instance, number, personalize(text.trim(), recipient));
-          } else if (type === "media") {
+          } else if (isMediaType) {
             await sessionsApi.sendMedia(instance, number, {
               base64,
               mediatype: mediatype!,
               mimetype: file!.type || "application/octet-stream",
               fileName: file!.name,
             }, personalize(text.trim(), recipient));
-          } else if (type === "buttons") {
+          } else if (isButtonType) {
             const validButtons = buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((button, i) => ({
               id: button.id || String(i + 1),
               displayText: personalize(button.displayText.trim(), recipient),
@@ -207,6 +212,8 @@ function SendPage() {
                     <SelectItem value="media">Media message</SelectItem>
                     <SelectItem value="buttons">Interactive buttons</SelectItem>
                     <SelectItem value="list">Interactive list</SelectItem>
+                    <SelectItem value="media-buttons">Media + buttons</SelectItem>
+                    <SelectItem value="media-list">Media + list</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -232,7 +239,7 @@ function SendPage() {
 
             {type === "text" && <Textarea className="min-h-40 resize-y" placeholder="Write your message..." value={text} onChange={(e) => setText(e.target.value)} />}
 
-            {type === "media" && <div className="space-y-3">
+            {isMediaType && <div className="space-y-3">
               <Textarea className="min-h-28 resize-y" placeholder="Optional caption. Personalization is supported." value={text} onChange={(e) => setText(e.target.value)} />
               <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface/50 px-4 text-center transition hover:border-primary/50 hover:bg-primary/5">
                 <FileUp className="mb-2 size-7 text-primary" />
@@ -242,18 +249,18 @@ function SendPage() {
               </label>
             </div>}
 
-            {(type === "buttons" || type === "list") && <div className="space-y-3">
+            {(isButtonType || isListType) && <div className="space-y-3">
               <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
               <Textarea placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
               <Input placeholder="Footer (optional)" value={footer} onChange={(e) => setFooter(e.target.value)} />
             </div>}
 
-            {type === "buttons" && <div className="mt-4 space-y-3 rounded-xl border bg-surface/40 p-4">
+            {isButtonType && <div className="mt-4 space-y-3 rounded-xl border bg-surface/40 p-4">
               <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">Buttons</p><p className="text-xs text-muted-foreground">1–3 quick reply buttons</p></div><Button type="button" variant="outline" size="sm" disabled={buttons.length >= 3} onClick={() => setButtons([...buttons, newButton()])}><Plus className="mr-1 size-4" />Add</Button></div>
               {buttons.map((button, index) => <div className="flex gap-2" key={button.id}><Input placeholder={`Button ${index + 1} text`} value={button.displayText} onChange={(e) => setButtons(buttons.map((item) => item.id === button.id ? { ...item, displayText: e.target.value } : item))} />{buttons.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setButtons(buttons.filter((item) => item.id !== button.id))}><Trash2 className="size-4" /></Button>}</div>)}
             </div>}
 
-            {type === "list" && <div className="mt-4 space-y-4 rounded-xl border bg-surface/40 p-4">
+            {isListType && <div className="mt-4 space-y-4 rounded-xl border bg-surface/40 p-4">
               <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">List menu</p><p className="text-xs text-muted-foreground">Up to 10 rows across sections</p></div><Input className="max-w-40" placeholder="Button text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} /></div>
               {sections.map((section, si) => <div className="space-y-2 rounded-lg border bg-white p-3" key={si}>
                 <div className="flex gap-2"><Input placeholder={`Section ${si + 1} title`} value={section.title || ""} onChange={(e) => updateSection(si, { title: e.target.value })} />{sections.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => setSections(sections.filter((_, index) => index !== si))}><Trash2 className="size-4" /></Button>}</div>
@@ -267,8 +274,19 @@ function SendPage() {
 
         <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between"><div><h2 className="font-semibold text-navy">Live preview</h2><p className="text-xs text-muted-foreground">Preview using the first recipient's personalization data.</p></div><MessageSquare className="size-5 text-primary" /></div>
+            <div className="mt-4 flex justify-end rounded-xl bg-[#efeae2] p-4">
+              <div className="w-full max-w-[300px] rounded-xl bg-white p-3 shadow-sm">
+                {isMediaType && file && <div className="mb-3 overflow-hidden rounded-lg bg-surface p-2 text-center text-xs text-muted-foreground">{file.type.startsWith("image/") ? <img src={URL.createObjectURL(file)} className="max-h-44 w-full rounded-md object-cover" /> : <div className="py-8"><FileUp className="mx-auto mb-2 size-6 text-primary" />{file.name}</div>}</div>}
+                {isButtonType || isListType ? <><p className="whitespace-pre-wrap text-sm font-semibold">{personalize(title || "Message title", previewRecipient)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{personalize(description || previewText || "Your message preview", previewRecipient)}</p>{isButtonType ? <div className="mt-3 space-y-1">{buttons.filter((b) => b.displayText.trim()).slice(0, 3).map((b) => <div key={b.id} className="rounded-md border border-primary/20 py-2 text-center text-sm font-medium text-primary">{personalize(b.displayText, previewRecipient)}</div>)}</div> : <div className="mt-3 space-y-1">{sections.flatMap((s) => s.rows).filter((r) => r.title.trim()).slice(0, 10).map((r) => <div key={r.rowId} className="rounded-md border p-2"><p className="text-sm font-medium">{personalize(r.title, previewRecipient)}</p>{r.description && <p className="text-xs text-muted-foreground">{personalize(r.description, previewRecipient)}</p>}</div>)}</div>}{isListType && <div className="mt-2 rounded-md bg-surface py-2 text-center text-xs font-medium">{personalize(buttonText, previewRecipient)}</div>}</> : <p className="whitespace-pre-wrap text-sm">{previewText || "Your message preview will appear here."}</p>}
+                <p className="mt-1 text-right text-[10px] text-muted-foreground">now</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h2 className="font-semibold text-navy">Send controls</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Messages are sent sequentially to protect your WhatsApp instance.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Messages are sent sequentially to protect your WhatsApp instance. Media + interactive sends the media first, followed by the interactive message because Evolution exposes media and interactive messages as separate endpoints.</p>
             <div className="mt-4 space-y-2">
               <label className="text-sm font-medium">Delay between recipients</label>
               <div className="flex items-center gap-2"><Input type="number" min={MIN_DELAY_MS} max={10000} step={100} value={delayMs} onChange={(e) => setDelayMs(e.target.value)} /><span className="text-xs text-muted-foreground">ms</span></div>
