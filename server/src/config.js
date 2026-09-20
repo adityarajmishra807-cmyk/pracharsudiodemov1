@@ -6,6 +6,7 @@ export const config = Object.freeze({
   nodeEnv: env('NODE_ENV', 'development'),
   port: Number(process.env.PORT || 3000),
   clientOrigin: env('CLIENT_ORIGIN', 'http://localhost:5173'),
+  webhookSecret: env('WEBHOOK_SECRET'),
   evolutionUrl: env('EVOLUTION_API_URL').replace(/\/+$/, ''),
   evolutionKey: env('EVOLUTION_API_KEY'),
   supabaseDbUrl: env('SUPABASE_DB_URL'),
