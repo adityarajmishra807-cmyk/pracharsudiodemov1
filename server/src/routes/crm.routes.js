@@ -67,13 +67,21 @@ crmRouter.delete('/leads/:id',async(req,res,next)=>{
 
 crmRouter.get('/stats',async(_req,res,next)=>{
   try{
-    const [l,c,m,ca]=await Promise.all([
+    const [l,m,ca]=await Promise.all([
       pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE status='won')::int won FROM leads`),
-      pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE status='open')::int open FROM conversations`),
-      pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE direction='out')::int outbound FROM messages`),
+      pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE ok)::int outbound FROM campaign_results`),
       pool.query('SELECT COUNT(*)::int total FROM campaigns')
     ]);
     const leads=Number(l.rows[0].total),won=Number(l.rows[0].won);
-    res.json({leads,won,conversion:leads?Number((won/leads*100).toFixed(1)):0,conversations:Number(c.rows[0].total),openConversations:Number(c.rows[0].open),messages:Number(m.rows[0].total),outboundMessages:Number(m.rows[0].outbound),campaigns:Number(ca.rows[0].total)});
+    res.json({
+      leads,
+      won,
+      conversion:leads?Number((won/leads*100).toFixed(1)):0,
+      conversations:0,
+      openConversations:0,
+      messages:Number(m.rows[0].total),
+      outboundMessages:Number(m.rows[0].outbound),
+      campaigns:Number(ca.rows[0].total)
+    });
   }catch(e){next(e);}
-});
+}
