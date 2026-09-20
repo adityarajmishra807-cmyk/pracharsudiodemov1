@@ -21,11 +21,12 @@ const STATUS_MAP = {
 };
 
 function validWebhook(req) {
-  const expected = config.webhookSecret || config.evolutionKey;
-  if (!expected) return false;
+  const expected = config.evolutionKey;
+  const webhookSecret = config.webhookSecret;
+  if (!expected && !webhookSecret) return false;
   const payloadKey = req.body?.apikey || req.body?.apiKey;
   const headerKey = req.get('x-api-key') || req.get('x-webhook-secret') || String(req.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  return payloadKey === expected || headerKey === expected;
+  return (expected && (payloadKey === expected || headerKey === expected)) || (webhookSecret && (payloadKey === webhookSecret || headerKey === webhookSecret));
 }
 
 function extractUpdates(body) {
