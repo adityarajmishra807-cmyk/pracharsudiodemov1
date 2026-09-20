@@ -1,3 +1,4 @@
+import { apiRequest } from "./api";
 export type Analytics = {
   days: number;
   overview: {
@@ -14,12 +15,7 @@ export type Analytics = {
 
 
 
-async function request<T>(path: string): Promise<T> {
-  const response = await fetch(base() + path, { headers: { Accept: "application/json" }, cache: "no-store" });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
-  return body as T;
-}
+async function request<T>(path: string): Promise<T> { return apiRequest<T>(path); }
 
 export const analyticsApi = {
   get: (days: 7 | 30 | 60 | 90) => request<Analytics>(`/api/campaign-jobs/analytics?days=${days}`),
