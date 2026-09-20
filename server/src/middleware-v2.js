@@ -8,7 +8,13 @@ export function registerMiddleware(app) {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.use(cors({ origin: config.clientOrigin === '*' ? true : config.clientOrigin, credentials: true }));
+  const allowedOrigins = config.clientOrigin === '*' ? true : config.clientOrigin.split(',').map((origin) => origin.trim()).filter(Boolean);
+  app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Webhook-Secret'],
+  }));
   app.use(express.json({ limit: config.bodyLimit }));
   app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 
