@@ -87,6 +87,7 @@ function TemplatesPage() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [mediaLoading, setMediaLoading] = useState(false);
 
   const canUse = can("templatesUse") || can("templatesManage");
   const canManage = can("templatesManage");
@@ -120,23 +121,30 @@ function TemplatesPage() {
       toast.error("Media must be 8MB or smaller.");
       return;
     }
+    setMediaLoading(true);
     const reader = new FileReader();
     reader.onload = () => {
+      const mediaBase64 = String(reader.result || "");
       setDraft((d) => ({
         ...d,
         data: {
           ...d.data,
-          mediaBase64: String(reader.result || ""),
+          mediaBase64,
           mediaFileName: file.name,
           mediaMimeType: file.type || "application/octet-stream",
         },
       }));
+      setMediaLoading(false);
     };
-    reader.onerror = () => toast.error("Could not read media file.");
+    reader.onerror = () => {
+      setMediaLoading(false);
+      toast.error("Could not read media file.");
+    };
     reader.readAsDataURL(file);
   };
 
   const save = async () => {
+    if (mediaLoading) return toast.error("Media is still being prepared. Please wait a moment.");
     if (!draft.name.trim()) return toast.error("Template name is required.");
     const needsMessage = ["text", "media-text", "buttons", "list", "media-buttons", "media-list"].includes(draft.type);
     const text = String(draft.data.text || draft.data.caption || "").trim();
@@ -276,7 +284,7 @@ function TemplatesPage() {
           <div className="min-w-0">{renderEditor()}</div>
           <div className="lg:sticky lg:top-0 lg:self-start">{renderPreview()}</div>
         </div>
-        <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => void save()}>{editingId ? "Save changes" : "Create template"}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={mediaLoading} onClick={() => void save()}>{mediaLoading ? "Preparing media…" : editingId ? "Save changes" : "Create template"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;
