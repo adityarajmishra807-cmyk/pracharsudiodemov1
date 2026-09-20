@@ -5,6 +5,8 @@ import { shouldAutoPause } from './campaign.safety.js';
 const queue = [];
 const controls = new Map();
 let running = false;
+let activeCampaignId = null;
+const MAX_WORKERS = 1;
 
 function normalizeNumber(value) { return String(value ?? '').trim().replace(/[^0-9]/g, ''); }
 function personalize(template, recipient) {
@@ -30,6 +32,10 @@ export async function enqueueCampaign(id) {
 export async function getQueueSize() {
   const stats = await getQueueStats();
   return Number(stats.queued || 0) + Number(stats.running || 0);
+}
+export async function getQueueMonitor() {
+  const stats = await getQueueStats();
+  return { ...stats, activeCampaignId, workerRunning: running, maxWorkers: MAX_WORKERS };
 }
 export function pauseCampaign(id) { controls.set(id, 'paused'); }
 export function resumeCampaign(id) { controls.set(id, 'resumed'); void enqueueCampaign(id).catch((error) => console.error('[campaign-worker] resume enqueue failed:', error)); }
@@ -145,6 +151,7 @@ async function drain() {
       const job = await claimNextCampaignJob();
       if (!job) break;
       const id = job.campaignId;
+      activeCampaignId = id;
       try {
         await processCampaign(id);
         const latest = await getCampaign(id);
@@ -155,9 +162,11 @@ async function drain() {
       } catch (error) {
         await updateCampaign(id, { status: 'failed', error: error?.message || 'Campaign worker failed.' });
         await finishCampaignJob(id, 'failed', error?.message || 'Campaign worker failed.');
+      } finally {
+        activeCampaignId = null;
       }
     }
-  } finally { running = false; }
+  } finally { running = false; activeCampaignId = null; }
 }
 
 export async function recoverCampaigns() {
