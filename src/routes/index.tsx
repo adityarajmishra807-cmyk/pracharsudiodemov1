@@ -1,172 +1,78 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { ArrowRight, ShieldCheck, Users } from "lucide-react";
-import { useState } from "react";
-
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { ArrowRight, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authApi, setAuthToken, authToken } from "@/lib/auth-api";
 import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Sign in — Prachar Studio WhatsApp CRM" },
-      {
-        name: "description",
-        content:
-          "Enter the Prachar Studio workspace to manage leads, WhatsApp conversations, templates, campaigns and team permissions.",
-      },
-      { property: "og:title", content: "Sign in — Prachar Studio WhatsApp CRM" },
-      {
-        property: "og:description",
-        content:
-          "Owner and member access to the Prachar Studio WhatsApp CRM and admin panel.",
-      },
-    ],
-  }),
+  head: () => ({ meta: [{ title: "Sign in — Prachar Studio" }] }),
   component: EntryScreen,
 });
 
 function EntryScreen() {
-  const { ready, state, signIn, updateSettings } = useStore();
+  const { ready, signIn } = useStore();
   const router = useRouter();
-  const [ownerName, setOwnerName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [setupMode, setSetupMode] = useState(false);
 
-  const members = state.members.filter((m) => m.status !== "suspended");
-  const canEnter = ready && termsAccepted;
+  useEffect(() => {
+    if (!ready || !authToken()) return;
+    void authApi.me().then((user) => {
+      signIn({ kind: "owner" });
+      void router.navigate({ to: "/dashboard" });
+    }).catch(() => {});
+  }, [ready, router, signIn]);
 
-  const enterAsOwner = () => {
-    if (!canEnter) return;
-    const name = ownerName.trim() || state.settings.ownerName;
-    if (name && name !== state.settings.ownerName) updateSettings({ ownerName: name });
-    signIn({ kind: "owner" });
-    void router.navigate({ to: "/dashboard" });
+  const submit = async () => {
+    if (!termsAccepted) return toast.error("Accept the Terms & Conditions to continue.");
+    if (!email.trim() || !password) return toast.error("Enter your email and password.");
+    setLoading(true);
+    try {
+      const result = setupMode
+        ? await authApi.setup(email.trim(), password)
+        : await authApi.login(email.trim(), password);
+      setAuthToken(result.token);
+      signIn({ kind: result.user.role === "owner" ? "owner" : "member", ...(result.user.role === "owner" ? {} : { memberId: result.user.memberId || "" }) });
+      toast.success(setupMode ? "Workspace created." : "Signed in.");
+      void router.navigate({ to: "/dashboard" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const enterAsMember = (memberId: string) => {
-    if (!canEnter) return;
-    signIn({ kind: "member", memberId });
-    void router.navigate({ to: "/dashboard" });
-  };
-
-  return (
-    <div className="flex min-h-screen flex-col lg:grid lg:grid-cols-2">
-      <section className="flex flex-1 flex-col justify-between bg-navy px-6 py-8 lg:px-12 lg:py-12">
-        <Logo onDark />
-        <div className="mt-10 lg:mt-0">
-          <h1 className="max-w-md text-2xl leading-tight font-extrabold text-white lg:text-4xl">
-            WhatsApp CRM & admin workspace
-          </h1>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70 lg:text-base">
-            Leads, conversations, templates, campaigns, automations and team permissions in one place — built for the Prachar Studio team.
-          </p>
-          <ul className="mt-6 space-y-2 text-sm text-white/75">
-            {["Owner-controlled team permissions", "WhatsApp-style inbox with template insertion", "Campaign and automation builders"].map((item) => (
-              <li key={item} className="flex items-start gap-2">
-                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-                {item}
-              </li>
-            ))}
-          </ul>
+  return <div className="flex min-h-screen flex-col lg:grid lg:grid-cols-2">
+    <section className="flex flex-1 flex-col justify-between bg-navy px-6 py-8 lg:px-12 lg:py-12">
+      <Logo onDark />
+      <div className="mt-10 lg:mt-0">
+        <h1 className="max-w-md text-2xl leading-tight font-extrabold text-white lg:text-4xl">WhatsApp CRM & messaging workspace</h1>
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70 lg:text-base">Manage Evolution instances, recipients, campaigns, templates and analytics from one authenticated workspace.</p>
+      </div>
+      <p className="mt-10 text-xs text-white/45 lg:mt-0">Prachar Studio · Secure workspace access</p>
+    </section>
+    <section className="flex flex-1 items-center justify-center bg-white px-5 py-10 lg:px-12">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2 text-primary"><ShieldCheck className="size-5" /><span className="text-xs font-semibold uppercase tracking-wider">Secure sign in</span></div>
+        <h2 className="mt-3 text-2xl font-bold text-navy">{setupMode ? "Create workspace owner" : "Welcome back"}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{setupMode ? "Create the first owner account for this Supabase workspace." : "Sign in with your Prachar Studio account."}</p>
+        <div className="mt-6 space-y-4">
+          <div><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="email" className="mt-1.5 h-11" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@company.com" /></div>
+          <div><Label htmlFor="password">Password</Label><Input id="password" type="password" autoComplete={setupMode ? "new-password" : "current-password"} className="mt-1.5 h-11" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder={setupMode ? "At least 8 characters" : "Your password"} onKeyDown={(e)=>{if(e.key==="Enter")void submit();}} /></div>
+          <div className="flex items-start gap-3 rounded-lg border bg-surface p-3"><Checkbox id="terms" checked={termsAccepted} onCheckedChange={(v)=>setTermsAccepted(v===true)} /><Label htmlFor="terms" className="cursor-pointer text-xs leading-5">I agree to the <a href="/terms" className="font-semibold underline">Terms & Conditions</a>.</Label></div>
+          <Button className="h-11 w-full" disabled={loading || !ready} onClick={()=>void submit()}>{loading ? "Please wait…" : setupMode ? "Create workspace" : "Sign in"}<ArrowRight className="ml-2 size-4" /></Button>
+          <button type="button" className="w-full text-center text-xs font-medium text-muted-foreground hover:text-primary" onClick={()=>setSetupMode((v)=>!v)}>{setupMode ? "Already have an account? Sign in" : "First time setup? Create owner account"}</button>
         </div>
-        <p className="mt-10 text-xs text-white/45 lg:mt-0">Frontend demo · data stays in this browser</p>
-      </section>
-
-      <section className="flex flex-1 items-center justify-center bg-white px-5 py-10 lg:px-12">
-        <div className="w-full max-w-sm">
-          <h2 className="text-xl font-bold text-navy">Enter the workspace</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">Choose how you want to review the demo.</p>
-
-          <div className="mt-6 rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
-              <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
-              Owner access
-            </div>
-            <div className="mt-3 space-y-2">
-              <Label htmlFor="owner-name">Your name</Label>
-              <Input
-                id="owner-name"
-                autoComplete="name"
-                placeholder={state.settings.ownerName || "e.g. Workspace owner"}
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-                className="h-11"
-              />
-              <p className="text-xs text-muted-foreground">Used on your profile inside the workspace.</p>
-            </div>
-            <Button onClick={enterAsOwner} className="mt-4 h-11 w-full" disabled={!canEnter}>
-              Continue as owner
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-
-          <div className="mt-4 rounded-lg border border-border bg-surface p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
-              <Users className="size-4 text-primary" aria-hidden="true" />
-              Member access
-            </div>
-            {members.length === 0 ? (
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                No team members exist yet. Sign in as owner and add members in Team Management to test permission-based access.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {members.map((member) => (
-                  <li key={member.id}>
-                    <button
-                      type="button"
-                      onClick={() => enterAsMember(member.id)}
-                      disabled={!canEnter}
-                      className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-foreground">{member.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{member.jobTitle || member.email}</span>
-                      </span>
-                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-5 rounded-lg border border-border bg-surface p-4">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="accept-terms"
-                checked={termsAccepted}
-                onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                aria-describedby="terms-description"
-                className="mt-0.5"
-              />
-              <div className="min-w-0">
-                <Label htmlFor="accept-terms" className="cursor-pointer text-sm font-medium leading-5 text-foreground">
-                  I have read and agree to the <Link to="/terms" className="font-semibold text-navy underline underline-offset-2 hover:text-primary">Terms & Conditions</Link>.
-                </Label>
-                <p id="terms-description" className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  This includes the WhatsApp account and number risks, bulk messaging restrictions, acceptable-use rules, and your responsibility for messages sent through Prachar Studio.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {!termsAccepted ? (
-            <p className="mt-3 text-center text-xs font-medium text-primary">
-              Accept the Terms & Conditions to continue.
-            </p>
-          ) : null}
-
-          <div className="mt-6 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-            <Link to="/terms" className="font-medium text-navy transition-colors hover:text-primary">Terms & Conditions</Link>
-            <span aria-hidden="true">•</span>
-            <span>Your use of the demo is subject to these terms.</span>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
+      </div>
+    </section>
+  </div>;
 }
