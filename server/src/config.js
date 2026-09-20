@@ -8,7 +8,7 @@ export const config = Object.freeze({
   clientOrigin: env('CLIENT_ORIGIN', 'http://localhost:5173'),
   evolutionUrl: env('EVOLUTION_API_URL').replace(/\/+$/, ''),
   evolutionKey: env('EVOLUTION_API_KEY'),
-  supabaseDbUrl: env('SUPABASE_DB_URL', env('DATABASE_URL')),
+  supabaseDbUrl: env('SUPABASE_DB_URL'),
   evolutionWebhookUrl: env('EVOLUTION_WEBHOOK_URL'),
   evolutionTimeoutMs: Number(process.env.EVOLUTION_TIMEOUT_MS || 60000),
   bodyLimit: env('BODY_LIMIT', '12mb'),
