@@ -11,7 +11,7 @@ export type AudienceDetail = Audience & {
   recipients: Array<Record<string, string>>;
 };
 
-const base = () => String(import.meta.env.VITE_WHATSAPP_API_URL || window.location.origin).replace(/\/+$/, "");
+
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(base() + path, {
