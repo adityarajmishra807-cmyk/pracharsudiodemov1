@@ -1,8 +1,60 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect,useState } from "react";
-import { Plus,Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-export const Route=createFileRoute("/_app/audiences")({component:AudiencesPage});
-const api=()=>String(import.meta.env.VITE_WHATSAPP_API_URL||"");
-function AudiencesPage(){const[list,setList]=useState<any[]>([]);const[name,setName]=useState("");const[description,setDescription]=useState("");const[phones,setPhones]=useState("");const load=async()=>{const r=await fetch(api()+"/api/audiences");setList(await r.json())};useEffect(()=>{void load()},[]);const create=async()=>{const recipients=phones.split(/[\n,]+/).map(phone=>({phone:phone.trim()})).filter(x=>x.phone);if(!name||!recipients.length)return;await fetch(api()+"/api/audiences",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,recipients})});setName("");setDescription("");setPhones("");await load()};const remove=async(id:string)=>{await fetch(api()+"/api/audiences/"+encodeURIComponent(id),{method:"DELETE"});await load()};return <div className="space-y-5"><div><p className="text-xs font-semibold tracking-wider text-primary">AUDIENCES</p><h1 className="text-2xl font-bold text-navy">Audiences</h1><p className="text-sm text-muted-foreground">Persistent recipient lists for campaigns.</p></div><div className="grid gap-4 lg:grid-cols-[360px_1fr]"><div className="space-y-3 rounded-xl border border-border bg-white p-4"><Input placeholder="Audience name" value={name} onChange={e=>setName(e.target.value)}/><Input placeholder="Description" value={description} onChange={e=>setDescription(e.target.value)}/><textarea className="min-h-40 w-full rounded-md border p-3 text-sm" placeholder="One phone number per line" value={phones} onChange={e=>setPhones(e.target.value)}/><Button onClick={()=>void create()}><Plus className="mr-2 size-4"/>Create audience</Button></div><div className="space-y-2">{list.map(a=><div key={a.id} className="flex items-center justify-between rounded-xl border bg-white p-4"><div><strong className="text-sm">{a.name}</strong><p className="text-xs text-muted-foreground">{a.description||"No description"} · {a.total||0} recipients</p></div><Button variant="ghost" size="icon" onClick={()=>void remove(a.id)}><Trash2 className="size-4"/></Button></div>)}</div></div></div>}
+import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
+
+export const Route = createFileRoute("/_app/audiences")({ component: AudiencesPage });
+
+const api = () => String(import.meta.env.VITE_WHATSAPP_API_URL || window.location.origin).replace(/\/+$/, "");
+
+async function request(path: string, init: RequestInit = {}) {
+  const response = await fetch(api() + path, { ...init, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
+  return body;
+}
+
+function AudiencesPage() {
+  const [list, setList] = useState<any[]>([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [recipients, setRecipients] = useState<RecipientRow[]>([]);
+
+  const load = async () => { try { setList(await request("/api/audiences")); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load audiences"); } };
+  useEffect(() => { void load(); }, []);
+
+  const create = async () => {
+    if (!name.trim()) return toast.error("Audience name is required.");
+    if (!recipients.length) return toast.error("Add at least one valid recipient.");
+    if (recipients.length > 2500) return toast.error("Maximum 2500 recipients per audience.");
+    try {
+      await request("/api/audiences", { method: "POST", body: JSON.stringify({ name: name.trim(), description: description.trim(), recipients }) });
+      toast.success("Audience created.");
+      setName(""); setDescription(""); setRecipients([]); await load();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Could not create audience"); }
+  };
+
+  const remove = async (id: string) => {
+    try { await request("/api/audiences/" + encodeURIComponent(id), { method: "DELETE" }); toast.success("Audience deleted."); await load(); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Could not delete audience"); }
+  };
+
+  return <div className="space-y-5">
+    <div><p className="text-xs font-semibold tracking-wider text-primary">AUDIENCES</p><h1 className="text-2xl font-bold text-navy">Audiences</h1><p className="text-sm text-muted-foreground">Persistent recipient lists for campaigns, with spreadsheet validation.</p></div>
+    <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+      <div className="space-y-4 rounded-xl border border-border bg-white p-4">
+        <Input placeholder="Audience name" value={name} onChange={e => setName(e.target.value)} />
+        <Input placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
+        <RecipientImporter value={recipients} onChange={setRecipients} max={2500} />
+        <Button onClick={() => void create()}><Plus className="mr-2 size-4" />Create audience</Button>
+      </div>
+      <div className="space-y-2">{list.map(a => <div key={a.id} className="flex items-center justify-between rounded-xl border bg-white p-4">
+        <div><strong className="text-sm">{a.name}</strong><p className="text-xs text-muted-foreground">{a.description || "No description"} · {a.total || 0} recipients</p></div>
+        <Button variant="ghost" size="icon" onClick={() => void remove(a.id)}><Trash2 className="size-4" /></Button>
+      </div>)}</div>
+    </div>
+  </div>;
+}
