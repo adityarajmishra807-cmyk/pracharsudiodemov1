@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../services/db.js';
 import { createCampaign, getCampaign, listCampaigns, updateCampaign } from '../services/campaign.store.js';
-import { cancelCampaign, enqueueCampaign, getQueueSize, pauseCampaign, resumeCampaign } from '../services/campaign.worker.js';
+import { cancelCampaign, enqueueCampaign, getQueueMonitor, getQueueSize, pauseCampaign, resumeCampaign } from '../services/campaign.worker.js';
 import { enforceCampaignSafety } from '../services/campaign.safety.js';
 
 export const campaignJobsRouter = Router();
@@ -208,7 +208,7 @@ campaignJobsRouter.get('/analytics', requirePermission('analytics'), async (req,
 });
 
 campaignJobsRouter.get('/queue/status', requirePermission('campaigns'), async (_req, res, next) => {
-  try { return res.json({ queueSize: await getQueueSize() }); } catch (error) { return next(error); }
+  try { return res.json(await getQueueMonitor()); } catch (error) { return next(error); }
 });
 
 campaignJobsRouter.post('/:id/retry-failed', requirePermission('campaigns'), async (req, res, next) => {
