@@ -7,7 +7,17 @@ templatesRouter.use(authUser);
 const allowedTypes = ['text','media','media-text','buttons','list','media-buttons','media-list'];
 
 function mapTemplate(row) {
-  return { id: row.id, name: row.name, type: row.type, ...row.data, createdAt: row.created_at?.toISOString?.() || row.created_at, updatedAt: row.updated_at?.toISOString?.() || row.updated_at };
+  const data = row.data && typeof row.data === 'object' ? row.data : {};
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    category: String(data.category || 'Marketing'),
+    status: String(data.status || 'draft'),
+    data,
+    createdAt: row.created_at?.toISOString?.() || row.created_at,
+    updatedAt: row.updated_at?.toISOString?.() || row.updated_at,
+  };
 }
 function validate(body) {
   const name = String(body?.name || '').trim();
