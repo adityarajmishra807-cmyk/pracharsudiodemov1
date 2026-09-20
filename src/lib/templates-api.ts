@@ -1,3 +1,4 @@
+import { apiRequest } from "./api";
 export type Template = {
   id: string;
   name: string;
@@ -11,16 +12,7 @@ export type Template = {
 
 
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(base() + path, {
-    ...init,
-    headers: { Accept: "application/json", ...(localStorage.getItem("prachar-auth-token") ? { Authorization: `Bearer ${localStorage.getItem("prachar-auth-token")}` } : {}), ...(localStorage.getItem("prachar-auth-token") ? { Authorization: `Bearer ${localStorage.getItem("prachar-auth-token")}` } : {}), ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) },
-    cache: "no-store",
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
-  return body as T;
-}
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> { return apiRequest<T>(path, init); }
 
 export const templatesApi = {
   list: () => request<Template[]>("/api/templates"),
