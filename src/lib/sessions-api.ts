@@ -17,7 +17,13 @@ export type ApiResponse = {
   message?: string;
 };
 
-// The frontend talks only to the WhatsApp backend. It never calls Evolution API.
+export type MediaPayload = {
+  base64: string;
+  mediatype: 'image' | 'video' | 'document';
+  mimetype: string;
+  fileName: string;
+};
+
 function backendBaseUrl() {
   const configured = String(import.meta.env.VITE_WHATSAPP_API_URL || '').trim().replace(/\/+$/, '');
   return configured || window.location.origin;
@@ -34,7 +40,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     cache: 'no-store',
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body?.message || `Request failed (${response.status})`);
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
+  }
   return body as T;
 }
 
@@ -45,8 +55,11 @@ export const sessionsApi = {
   restart: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}/restart`, { method: 'POST' }),
   disconnect: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}/disconnect`, { method: 'POST' }),
   remove: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}`, { method: 'DELETE' }),
-  sendText: (instance: string, number: string, text: string) => request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, {
-    method: 'POST',
-    body: JSON.stringify({ number, text }),
-  }),
+  sendText: (instance: string, number: string, text: string, options: { linkPreview?: boolean; delayMs?: number } = {}) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, { method: 'POST', body: JSON.stringify({ number, text, ...options }) }),
+  sendMedia: (instance: string, number: string, media: MediaPayload, caption = '', delayMs = 0) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-media`, {
+      method: 'POST',
+      body: JSON.stringify({ number, media, caption, delayMs }),
+    }),
 };
