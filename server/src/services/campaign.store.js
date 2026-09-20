@@ -118,15 +118,41 @@ export async function finishCampaignJob(id, status = 'completed', error = null) 
   );
 }
 export async function recoverCampaignJobs() {
-  const { rows } = await pool.query(
-    `UPDATE campaign_queue
-     SET status='queued',locked_at=NULL,updated_at=NOW()
-     WHERE status='running' AND locked_at < NOW() - INTERVAL '5 minutes'
-     RETURNING campaign_id`,
-  );
-  const queued = await pool.query(`SELECT campaign_id FROM campaign_queue WHERE status='queued' AND available_at<=NOW() ORDER BY created_at`);
-  return [...rows.map((r) => r.campaign_id), ...queued.rows.map((r) => r.campaign_id)];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const stale = await client.query(
+      `UPDATE campaign_queue q
+       SET status='queued',locked_at=NULL,updated_at=NOW()
+       FROM campaigns c
+       WHERE q.campaign_id=c.id AND q.status='running'
+         AND q.locked_at < NOW() - INTERVAL '5 minutes'
+       RETURNING q.campaign_id`,
+    );
+    await client.query(
+      `UPDATE campaigns c SET status='queued',started_at=NULL,updated_at=NOW()
+       WHERE c.status='running'
+         AND EXISTS (SELECT 1 FROM campaign_queue q WHERE q.campaign_id=c.id AND q.status='queued')`,
+    );
+    await client.query(
+      `INSERT INTO campaign_queue(campaign_id,status,attempts,available_at)
+       SELECT id,'queued',0,NOW() FROM campaigns
+       WHERE status='queued'
+       ON CONFLICT(campaign_id) DO NOTHING`,
+    );
+    const queued = await client.query(
+      `SELECT campaign_id FROM campaign_queue
+       WHERE status='queued' AND available_at<=NOW()
+       ORDER BY created_at`,
+    );
+    await client.query('COMMIT');
+    return [...stale.rows.map((r) => r.campaign_id), ...queued.rows.map((r) => r.campaign_id)];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
 }
+
 export async function getQueueStats() {
   const { rows } = await pool.query(
     `SELECT
