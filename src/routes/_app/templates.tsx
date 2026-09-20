@@ -105,7 +105,7 @@ function TemplatesPage() {
     setDraft({
       name: t.name,
       type: t.type,
-      data: { ...t.data },
+      data: t?.data && typeof t.data === "object" ? { ...t.data } : {},
     });
     setOpen(true);
   };
@@ -151,7 +151,7 @@ function TemplatesPage() {
     catch (e) { toast.error(e instanceof Error ? e.message : "Could not delete template."); }
   };
 
-  const preview = (t: Template) => String(t.data.text || t.data.caption || "Interactive template");
+  const preview = (t: Template) => { const data = t?.data && typeof t.data === "object" ? t.data : {}; return String(data.text || data.caption || "Interactive template"); };
 
   const renderEditor = () => {
     const isMedia = ["media", "media-text", "media-buttons", "media-list"].includes(draft.type);
