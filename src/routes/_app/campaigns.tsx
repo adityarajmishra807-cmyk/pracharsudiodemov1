@@ -52,6 +52,9 @@ function CampaignsPage() {
   const [audienceBusy, setAudienceBusy] = useState(false);
   const [templateBusy, setTemplateBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [detailsBusy, setDetailsBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [instance, setInstance] = useState("");
@@ -213,6 +216,19 @@ function CampaignsPage() {
     finally { setBusy(false); }
   };
 
+  const showDetails = async (id: string) => {
+    setDetailsBusy(true);
+    setDetailsOpen(true);
+    try {
+      setSelectedCampaign(await campaignsApi.get(id));
+    } catch (e) {
+      setDetailsOpen(false);
+      toast.error(e instanceof Error ? e.message : "Could not load campaign details.");
+    } finally {
+      setDetailsBusy(false);
+    }
+  };
+
   const action = async (id: string, fn: (id: string) => Promise<Campaign>, message: string) => {
     try { await fn(id); toast.success(message); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "Action failed"); }
   };
@@ -231,9 +247,55 @@ function CampaignsPage() {
           {c.status === "paused" && <Button size="sm" onClick={() => void action(c.id, campaignsApi.resume, "Resumed")}><Play className="size-3.5" /> Resume</Button>}
           {["queued", "running", "paused"].includes(c.status) && <Button size="sm" variant="outline" onClick={() => void action(c.id, campaignsApi.cancel, "Cancelled")}><Square className="size-3.5" /> Cancel</Button>}
           {c.failed > 0 && <Button size="sm" variant="outline" onClick={() => void action(c.id, campaignsApi.retryFailed, "Retry queued")}><RotateCcw className="size-3.5" /> Retry failed</Button>}
+          <Button size="sm" variant="outline" onClick={() => void showDetails(c.id)}>Delivery details</Button>
           <Button size="sm" variant="ghost" onClick={() => void load()}><RefreshCw className="size-3.5" /></Button>
         </div>
       </li>)}</ul>}
+
+    <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Delivery details{selectedCampaign ? ` — ${selectedCampaign.name}` : ""}</DialogTitle>
+          <DialogDescription>Recipient-level send and Evolution delivery status tracking.</DialogDescription>
+        </DialogHeader>
+        {detailsBusy || !selectedCampaign ? <div className="py-10 text-center text-sm text-muted-foreground">Loading delivery details…</div> :
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+              {[["Total",selectedCampaign.total],["Sent",selectedCampaign.sent],["Failed",selectedCampaign.failed],["Remaining",Math.max(0,selectedCampaign.total-selectedCampaign.sent-selectedCampaign.failed)],["Status",selectedCampaign.status]].map(([label,value]) =>
+                <div key={String(label)} className="rounded-md border p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></div>
+              )}
+            </div>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead><tr className="border-b bg-muted/30 text-left text-xs uppercase text-muted-foreground">
+                  <th className="p-3">#</th><th className="p-3">Recipient</th><th className="p-3">Result</th><th className="p-3">Evolution message</th><th className="p-3">Latest status</th><th className="p-3">Updated</th>
+                </tr></thead>
+                <tbody>
+                  {selectedCampaign.recipients.map((recipient, index) => {
+                    const result = selectedCampaign.results.find((item) => item.index === index);
+                    const statuses = result?.deliveryStatuses || [];
+                    const latest = statuses.length ? statuses[statuses.length - 1] as Record<string, unknown> : null;
+                    const status = String(latest?.status || (result?.ok ? "SENT" : "ERROR"));
+                    const messageId = String(latest?.messageId || "—");
+                    const updatedAt = latest?.updatedAt ? formatDate(String(latest.updatedAt)) : result?.timestamp ? formatDate(result.timestamp) : "—";
+                    return <tr key={index} className="border-b last:border-0">
+                      <td className="p-3">{index + 1}</td>
+                      <td className="p-3 font-medium">{recipient.phone || "—"}{recipient.name ? <div className="text-xs text-muted-foreground">{recipient.name}</div> : null}</td>
+                      <td className="p-3"><span className={result?.ok ? "text-foreground" : "text-destructive"}>{result?.ok ? "Sent" : "Failed"}</span>{result?.message ? <div className="max-w-xs text-xs text-destructive">{result.message}</div> : null}</td>
+                      <td className="p-3"><code className="text-xs">{messageId}</code></td>
+                      <td className="p-3"><StatusBadge value={status} /></td>
+                      <td className="p-3 text-xs text-muted-foreground">{updatedAt}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+              {!selectedCampaign.recipients.length && <p className="p-6 text-center text-sm text-muted-foreground">No recipients.</p>}
+            </div>
+            <p className="text-xs text-muted-foreground">Evolution statuses tracked: ERROR, PENDING, SERVER_ACK, DELIVERY_ACK, READ, DELETED and PLAYED.</p>
+          </div>}
+        <DialogFooter><Button variant="outline" onClick={() => setDetailsOpen(false)}>Close</Button>{selectedCampaign && <Button onClick={() => void showDetails(selectedCampaign.id)} disabled={detailsBusy}><RefreshCw className="size-4" /> Refresh</Button>}</DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl">
