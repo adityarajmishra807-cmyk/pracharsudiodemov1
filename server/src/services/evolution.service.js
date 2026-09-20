@@ -136,13 +136,18 @@ export async function connectInstance(instance) {
 export const restartInstance = (instance) => request({ method: 'PUT', url: `/instance/restart/${encodeURIComponent(instance)}` }).then((r) => r.data);
 
 function cleanNumber(value) {
-  return String(value || '').replace(/[^0-9@.\-a-zA-Z]/g, '');
+  const raw = String(value || '').trim();
+  // Evolution's send endpoints expect a phone number, not a WhatsApp JID.
+  // Reject group/LID JIDs here rather than silently turning them into an invalid number.
+  if (raw.includes('@')) return '';
+  return raw.replace(/\\D/g, '');
 }
 
 export async function sendText(instance, number, text, options = {}) {
   const cleanNumberValue = cleanNumber(number);
   const message = String(text || '').trim();
-  if (!cleanNumberValue) throw new EvolutionError('Recipient number is required', 400);
+  if (!cleanNumberValue) throw new EvolutionError('Recipient must be a phone number, not a WhatsApp JID.', 400);
+  if (!/^\\d{8,15}$/.test(cleanNumberValue)) throw new EvolutionError('Recipient phone number must contain 8–15 digits.', 400);
   if (!message) throw new EvolutionError('Message text is required', 400);
 
   const { data } = await request({
@@ -166,10 +171,14 @@ export async function sendMedia(instance, number, media, options = {}) {
   const fileName = String(media?.fileName || 'media').trim();
   const caption = String(options.caption || '').trim();
 
-  if (!cleanNumberValue) throw new EvolutionError('Recipient number is required', 400);
+  if (!cleanNumberValue) throw new EvolutionError('Recipient must be a phone number, not a WhatsApp JID.', 400);
+  if (!/^\\d{8,15}$/.test(cleanNumberValue)) throw new EvolutionError('Recipient phone number must contain 8–15 digits.', 400);
   if (!base64) throw new EvolutionError('Media data is required', 400);
   if (!['image', 'video', 'document'].includes(mediatype)) throw new EvolutionError('Media type must be image, video or document', 400);
   if (!mimetype) throw new EvolutionError('Media MIME type is required', 400);
+  if (Buffer.byteLength(base64, 'base64') > 8 * 1024 * 1024) {
+    throw new EvolutionError('Media must be 8 MB or smaller.', 413);
+  }
 
   const { data } = await request({
     method: 'POST',
