@@ -81,7 +81,7 @@ export async function enqueueCampaignJob(id) {
     `INSERT INTO campaign_queue(campaign_id,status,attempts,available_at)
      VALUES($1,'queued',0,NOW())
      ON CONFLICT(campaign_id) DO UPDATE
-       SET status=CASE WHEN campaign_queue.status IN ('failed','completed') THEN 'queued' ELSE campaign_queue.status END,
+       SET status=CASE WHEN campaign_queue.status IN ('failed','completed','paused') THEN 'queued' ELSE campaign_queue.status END,
            available_at=NOW(), updated_at=NOW()`,
     [id],
   );
