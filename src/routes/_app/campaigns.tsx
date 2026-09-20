@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Lock, Megaphone, Pause, Play, Plus, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
+import { Lock, Megaphone, Pause, Play, Plus, RefreshCw, RotateCcw, Square, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDate, useStore } from "@/lib/store";
 import { campaignsApi, type Campaign } from "@/lib/campaigns-api";
-import { sessionsApi, type Session } from "@/lib/sessions-api";
+import { sessionsApi, type Session } from "@/lib/sessions-api";\nimport * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/_app/campaigns")({
   head: () => ({ meta: [{ title: "Campaigns — Prachar Studio" }, { name: "description", content: "Persistent WhatsApp campaign manager." }] }),
@@ -54,7 +54,7 @@ function CampaignsPage() {
   const [name, setName] = useState("");
   const [instance, setInstance] = useState("");
   const [type, setType] = useState<CampaignType>("text");
-  const [recipients, setRecipients] = useState("");
+  const [recipients, setRecipients] = useState("");\n  const [importRows, setImportRows] = useState<Array<{ phone: string; name: string; company: string; custom1: string; custom2: string }>>([]);\n  const [importIssues, setImportIssues] = useState<string[]>([]);
   const [delayMs, setDelayMs] = useState("1500");
   const [text, setText] = useState("Hello {{name}}, we have an offer for {{company}}.");
   const [caption, setCaption] = useState("");
@@ -85,8 +85,42 @@ function CampaignsPage() {
   const requiresButtons = ["buttons", "media-buttons"].includes(type);
   const requiresList = ["list", "media-list"].includes(type);
 
+  const importSpreadsheet = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error("Spreadsheet has no sheets.");
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      if (!rows.length) throw new Error("Spreadsheet is empty.");
+      const aliases: Record<string,string> = { phone:"phone",number:"phone","phone number":"phone",mobile:"phone",name:"name",company:"company",custom1:"custom1","custom 1":"custom1",custom2:"custom2","custom 2":"custom2" };
+      const normalized = rows.map((row) => {
+        const mapped: Record<string,string> = {};
+        Object.entries(row).forEach(([key,value]) => {
+          const canonical = aliases[key.trim().toLowerCase().replace(/[_-]/g," ")] || key.trim().toLowerCase();
+          mapped[canonical] = String(value ?? "").trim();
+        });
+        return { phone: mapped.phone || "", name: mapped.name || "", company: mapped.company || "", custom1: mapped.custom1 || "", custom2: mapped.custom2 || "" };
+      });
+      const issues: string[] = [];
+      const valid: typeof normalized = [];
+      const seen = new Set<string>();
+      normalized.forEach((row,index) => {
+        const digits = row.phone.replace(/\D/g,"");
+        if (!digits) return issues.push(`Row ${index + 2}: phone is empty.`);
+        if (digits.length < 8 || digits.length > 15) return issues.push(`Row ${index + 2}: invalid phone number.`);
+        if (seen.has(digits)) return issues.push(`Row ${index + 2}: duplicate phone number.`);
+        seen.add(digits); valid.push({ ...row, phone: digits });
+      });
+      if (valid.length > 250) throw new Error("A campaign can contain at most 250 valid recipients.");
+      setImportRows(valid); setImportIssues(issues);
+      setRecipients(valid.map((r) => [r.phone,r.name,r.company,r.custom1,r.custom2].join(",")).join("\n"));
+      toast.success(`Imported ${valid.length} valid recipients${issues.length ? `; ${issues.length} rows need attention` : ""}.`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Could not import spreadsheet."); }
+  };
+
   const resetComposer = () => {
-    setName(""); setRecipients(""); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
+    setName(""); setRecipients(""); setImportRows([]); setImportIssues([]); setType("text"); setText("Hello {{name}}, we have an offer for {{company}}.");
     setCaption(""); setMedia(null); setTitle(""); setDescription(""); setFooter(""); setButtonText("View options");
     setButtons([emptyButton()]); setSections([emptySection()]);
   };
@@ -160,7 +194,17 @@ function CampaignsPage() {
             <div><Label>Evolution instance</Label><Select value={instance} onValueChange={setInstance}><SelectTrigger><SelectValue placeholder="Select instance" /></SelectTrigger><SelectContent>{connected.map((s) => <SelectItem key={s.instanceName} value={s.instanceName || ""}>{s.instanceName}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div><Label>Message type</Label><Select value={type} onValueChange={(v) => setType(v as CampaignType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["text","media","media-text","buttons","list","media-buttons","media-list"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Recipients</Label><Textarea value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder={"phone,name,company,custom1,custom2\n919999999999,Ravi,Acme,A,B"} /><p className="mt-1 text-xs text-muted-foreground">CSV-style rows. Maximum 250 recipients. Personalization supports {"{{name}}"}, {"{{company}}"}, {"{{custom1}}"}, {"{{custom2}}"}.</p></div>
+          <div className="space-y-2"><Label>Recipients</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => document.getElementById("campaign-recipient-file")?.click()}><Upload className="size-4"/> Import XLSX / XLS / CSV</Button>
+              <input id="campaign-recipient-file" className="hidden" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { const file=e.target.files?.[0]; if(file) void importSpreadsheet(file); e.currentTarget.value=""; }} />
+              {importRows.length > 0 && <Button type="button" variant="ghost" onClick={() => { setImportRows([]); setImportIssues([]); setRecipients(""); }}><X className="size-4"/> Clear import</Button>}
+            </div>
+            <Textarea value={recipients} onChange={(e) => { setRecipients(e.target.value); setImportRows([]); setImportIssues([]); }} placeholder={"phone,name,company,custom1,custom2\n919999999999,Ravi,Acme,A,B"} />
+            <p className="text-xs text-muted-foreground">Columns: phone, name, company, custom1, custom2. Maximum 250 recipients.</p>
+            {importRows.length > 0 && <div className="rounded-md border p-3 text-sm"><p className="font-medium">{importRows.length} valid recipients ready</p>{importIssues.length > 0 && <p className="mt-1 text-destructive">{importIssues.length} invalid/duplicate rows skipped.</p>}<div className="mt-2 max-h-28 overflow-auto text-xs">{importRows.slice(0,5).map((r,i)=><p key={i}>{r.phone} · {r.name || "No name"} · {r.company || "No company"}</p>)}</div></div>}
+            {importIssues.length > 0 && <details className="rounded-md border p-3 text-xs"><summary className="cursor-pointer font-medium">View validation issues</summary><ul className="mt-2 space-y-1">{importIssues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></details>}
+          </div>
 
           {type === "text" && <div><Label>Message</Label><Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Hello {{name}}" /></div>}
 
