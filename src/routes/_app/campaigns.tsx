@@ -44,6 +44,7 @@ function fileToBase64(file: File) {
 function CampaignsPage() {
   const { can } = useStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [queueMonitor, setQueueMonitor] = useState<Awaited<ReturnType<typeof campaignsApi.queue>> | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -73,7 +74,8 @@ function CampaignsPage() {
 
   const load = async () => {
     try {
-      const [items, available, savedAudiences, savedTemplates] = await Promise.all([campaignsApi.list(), sessionsApi.list(), audiencesApi.list(), templatesApi.list()]);
+      const [items, available, savedAudiences, savedTemplates, queue] = await Promise.all([campaignsApi.list(), sessionsApi.list(), audiencesApi.list(), templatesApi.list(), campaignsApi.queue()]);
+      setQueueMonitor(queue);
       setCampaigns(items);
       setSessions(available);
       setAudiences(savedAudiences);
@@ -236,7 +238,25 @@ function CampaignsPage() {
   if (!can("campaigns")) return <div className="space-y-5"><PageHeader title="Campaigns" /><EmptyState icon={Lock} title="No campaign access" description="Ask the workspace owner to enable campaigns for your account." /></div>;
 
   return <div className="space-y-5">
-    <PageHeader title="Campaigns" description="Persistent WhatsApp campaigns backed by the Evolution worker." actions={<Button onClick={() => setOpen(true)}><Plus className="size-4" /> New campaign</Button>} />
+    <PageHeader title="Campaigns" description="Persistent WhatsApp campaigns backed by the Evolution worker." actions={<Button onClick={() => setOpen(true)}><Plus className="size-4" /> New campaign</Button>} />\n    {queueMonitor && <section className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><p className="font-semibold">Campaign queue</p><p className="text-xs text-muted-foreground">{queueMonitor.workerRunning ? "Worker active" : "Worker idle"} · {queueMonitor.maxWorkers} worker slot{queueMonitor.maxWorkers === 1 ? "" : "s"}</p></div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border px-2.5 py-1">Queued {queueMonitor.queued}</span>
+          <span className="rounded-full border px-2.5 py-1">Running {queueMonitor.running}</span>
+          <span className="rounded-full border px-2.5 py-1">Paused {queueMonitor.paused}</span>
+          <span className="rounded-full border px-2.5 py-1">Failed {queueMonitor.failed}</span>
+        </div>
+      </div>
+      {queueMonitor.items.length > 0 && <div className="mt-3 overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead><tr className="border-b bg-muted/30 text-left text-xs uppercase text-muted-foreground"><th className="p-2.5">Campaign</th><th className="p-2.5">Queue status</th><th className="p-2.5">Attempts</th><th className="p-2.5">Updated</th><th className="p-2.5">Error</th></tr></thead>
+          <tbody>{queueMonitor.items.map((item) => <tr key={item.campaign_id} className="border-b last:border-0">
+            <td className="p-2.5 font-medium">{item.name}</td><td className="p-2.5"><StatusBadge value={item.status} /></td><td className="p-2.5">{item.attempts}</td><td className="p-2.5 text-xs text-muted-foreground">{formatDate(item.updated_at)}</td><td className="max-w-xs truncate p-2.5 text-xs text-destructive">{item.error || "—"}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
+    </section>
     {!campaigns.length ? <EmptyState icon={Megaphone} title="No campaigns yet" description="Create a persistent campaign and the background worker will process it." action={<Button onClick={() => setOpen(true)}>Create campaign</Button>} /> :
       <ul className="grid gap-3 lg:grid-cols-2">{campaigns.map((c) => <li key={c.id} className="rounded-lg border border-border bg-card p-4">
         <div className="flex justify-between gap-3"><div><p className="font-semibold text-navy">{c.name}</p><p className="text-xs text-muted-foreground">{c.type} · {c.instance} · {formatDate(c.createdAt)}</p></div><StatusBadge value={c.status} /></div>
