@@ -2,7 +2,8 @@ import { Outlet, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { AppShell } from "@/components/AppShell";
-import { authApi, authToken } from "@/lib/auth-api";\nimport { useStore } from "@/lib/store";
+import { authApi, authToken } from "@/lib/auth-api";
+import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
