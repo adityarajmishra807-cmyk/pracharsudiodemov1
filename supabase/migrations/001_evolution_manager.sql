@@ -31,23 +31,6 @@ create table if not exists public.lead_activity (
  text text not null,created_at timestamptz not null default now()
 );
 
-create table if not exists public.conversations (
- id text primary key,instance text not null,lead_id text references public.leads(id) on delete set null,
- remote_jid text not null,status text not null default 'open',assigned_to text,
- unread_count integer not null default 0,created_at timestamptz not null default now(),
- updated_at timestamptz not null default now(),unique(instance,remote_jid)
-);
-create index if not exists conversations_instance_updated_idx on public.conversations(instance,updated_at desc);
-create table if not exists public.messages (
- id text primary key,conversation_id text not null references public.conversations(id) on delete cascade,
- instance text not null,remote_jid text not null,from_me boolean not null default false,
- text text not null default '',message_type text not null default 'text',media jsonb,
- raw jsonb not null default '{}'::jsonb,status text,timestamp timestamptz not null default now(),
- unique(instance,id)
-);
-create index if not exists messages_conversation_time_idx on public.messages(conversation_id,timestamp);
-create index if not exists messages_instance_jid_idx on public.messages(instance,remote_jid,timestamp desc);
-
 create table if not exists public.templates (
  id text primary key,name text not null,type text not null,data jsonb not null default '{}'::jsonb,
  created_at timestamptz not null default now(),updated_at timestamptz not null default now()
@@ -111,8 +94,6 @@ alter table public.auth_sessions enable row level security;
 alter table public.workspace_settings enable row level security;
 alter table public.leads enable row level security;
 alter table public.lead_activity enable row level security;
-alter table public.conversations enable row level security;
-alter table public.messages enable row level security;
 alter table public.templates enable row level security;
 alter table public.audiences enable row level security;
 alter table public.audience_recipients enable row level security;
