@@ -220,7 +220,7 @@ export async function sendButtons(instance, number, payload) {
     url: `/message/sendButtons/${encodeURIComponent(instance)}`,
     data: {
       number: cleanNumberValue,
-      text: message,
+      title: message,
       buttons: normalizedButtons,
     },
   });
