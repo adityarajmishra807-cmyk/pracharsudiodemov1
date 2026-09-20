@@ -12,7 +12,7 @@ export const config = Object.freeze({
   supabaseDbUrl: env('SUPABASE_DB_URL'),
   evolutionWebhookUrl: env('EVOLUTION_WEBHOOK_URL'),
   evolutionTimeoutMs: Number(process.env.EVOLUTION_TIMEOUT_MS || 60000),
-  bodyLimit: env('BODY_LIMIT', '12mb'),
+  bodyLimit: env('BODY_LIMIT', '16mb'),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 120),
   campaignMinDelayMs: Number(process.env.CAMPAIGN_MIN_DELAY_MS || 1500),
