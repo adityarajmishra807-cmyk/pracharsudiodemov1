@@ -22,6 +22,7 @@ import {
 } from "@/lib/sessions-api";
 import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
 import { templatesApi, type Template } from "@/lib/templates-api";
+import { audiencesApi, type Audience } from "@/lib/audiences-api";
 
 export const Route = createFileRoute("/_app/send")({ component: SendPage });
 
@@ -78,6 +79,10 @@ function SendPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
+  const [audiences, setAudiences] = useState<Audience[]>([]);
+  const [selectedAudience, setSelectedAudience] = useState("");
+  const [audienceLoading, setAudienceLoading] = useState(false);
+  const [manualRecipient, setManualRecipient] = useState<RecipientRow>({ phone: "", name: "", company: "", custom1: "", custom2: "" });
   const [type, setType] = useState<MessageType>("text");
   const [text, setText] = useState("Hello {{name}},\n\nWe have an offer for {{company}}.");
   const [file, setFile] = useState<File | null>(null);
@@ -402,6 +407,58 @@ function SendPage() {
                 {recipients.length}/{MAX_RECIPIENTS}
               </span>
             </div>
+            <div className="mb-4 grid gap-3 rounded-xl border bg-surface/40 p-4 sm:grid-cols-[1fr_auto]">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Use saved audience</label>
+                <Select value={selectedAudience} onValueChange={(value) => void loadAudience(value)}>
+                  <SelectTrigger><SelectValue placeholder="Select a saved audience" /></SelectTrigger>
+                  <SelectContent>
+                    {audiences.map((audience) => (
+                      <SelectItem key={audience.id} value={audience.id}>{audience.name} · {audience.total} recipients</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="button" variant="outline" disabled={audienceLoading || !selectedAudience} onClick={() => void loadAudience(selectedAudience)}>
+                {audienceLoading ? "Loading…" : "Use audience"}
+              </Button>
+            </div>
+
+            <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <Input placeholder="Phone *" value={manualRecipient.phone} onChange={(e) => setManualRecipient({ ...manualRecipient, phone: e.target.value })} />
+              <Input placeholder="Name" value={manualRecipient.name} onChange={(e) => setManualRecipient({ ...manualRecipient, name: e.target.value })} />
+              <Input placeholder="Company" value={manualRecipient.company} onChange={(e) => setManualRecipient({ ...manualRecipient, company: e.target.value })} />
+              <Input placeholder="Custom 1" value={manualRecipient.custom1} onChange={(e) => setManualRecipient({ ...manualRecipient, custom1: e.target.value })} />
+              <Button type="button" variant="outline" onClick={addRecipient}><Plus className="mr-2 size-4" />Add recipient</Button>
+            </div>
+
+            {recipients.length > 0 && (
+              <div className="mb-4 overflow-hidden rounded-xl border">
+                <div className="max-h-72 overflow-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">#</th><th className="px-3 py-2">Phone</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Company</th><th className="px-3 py-2">Custom 1</th><th className="px-3 py-2">Custom 2</th><th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recipients.map((row, index) => (
+                        <tr key={`${row.phone}-${index}`} className="border-t">
+                          <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
+                          <td className="px-3 py-2 font-medium">{row.phone}</td>
+                          <td className="px-3 py-2">{row.name || "—"}</td>
+                          <td className="px-3 py-2">{row.company || "—"}</td>
+                          <td className="px-3 py-2">{row.custom1 || "—"}</td>
+                          <td className="px-3 py-2">{row.custom2 || "—"}</td>
+                          <td className="px-3 py-2 text-right"><Button type="button" variant="ghost" size="sm" onClick={() => removeRecipient(row.phone)}>Remove</Button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <RecipientImporter value={recipients} onChange={setRecipients} max={MAX_RECIPIENTS} />
           </section>
 
