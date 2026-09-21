@@ -107,7 +107,46 @@ function SendPage() {
 
   useEffect(() => {
     void templatesApi.list().then(setTemplates).catch(() => setTemplates([]));
+    void audiencesApi.list().then(setAudiences).catch(() => setAudiences([]));
   }, []);
+
+  const loadAudience = async (id: string) => {
+    setSelectedAudience(id);
+    if (!id) return;
+    setAudienceLoading(true);
+    try {
+      const audience = await audiencesApi.get(id);
+      const rows = Array.isArray(audience.recipients) ? audience.recipients : [];
+      if (rows.length > MAX_RECIPIENTS) {
+        toast.error(`Audience has ${rows.length} recipients; Send Message is limited to ${MAX_RECIPIENTS}.`);
+      }
+      setRecipients(rows.slice(0, MAX_RECIPIENTS).map((row) => ({
+        phone: String(row.phone || ""),
+        name: String(row.name || ""),
+        company: String(row.company || ""),
+        custom1: String(row.custom1 || ""),
+        custom2: String(row.custom2 || ""),
+      })));
+      toast.success(`Loaded ${Math.min(rows.length, MAX_RECIPIENTS)} recipients from the saved audience.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load audience");
+    } finally {
+      setAudienceLoading(false);
+    }
+  };
+
+  const addRecipient = () => {
+    const phone = manualRecipient.phone.replace(/\D/g, "");
+    if (!/^\d{8,15}$/.test(phone)) return toast.error("Enter a valid phone number (8–15 digits).");
+    if (recipients.some((row) => row.phone === phone)) return toast.error("That recipient is already in the list.");
+    if (recipients.length >= MAX_RECIPIENTS) return toast.error(`Maximum ${MAX_RECIPIENTS} recipients are allowed.`);
+    setRecipients((rows) => [...rows, { ...manualRecipient, phone }]);
+    setManualRecipient({ phone: "", name: "", company: "", custom1: "", custom2: "" });
+  };
+
+  const removeRecipient = (phone: string) => {
+    setRecipients((rows) => rows.filter((row) => row.phone !== phone));
+  };
 
   const applyTemplate = async (id: string) => {
     setSelectedTemplate(id);
@@ -424,11 +463,12 @@ function SendPage() {
               </Button>
             </div>
 
-            <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <Input placeholder="Phone *" value={manualRecipient.phone} onChange={(e) => setManualRecipient({ ...manualRecipient, phone: e.target.value })} />
               <Input placeholder="Name" value={manualRecipient.name} onChange={(e) => setManualRecipient({ ...manualRecipient, name: e.target.value })} />
               <Input placeholder="Company" value={manualRecipient.company} onChange={(e) => setManualRecipient({ ...manualRecipient, company: e.target.value })} />
               <Input placeholder="Custom 1" value={manualRecipient.custom1} onChange={(e) => setManualRecipient({ ...manualRecipient, custom1: e.target.value })} />
+              <Input placeholder="Custom 2" value={manualRecipient.custom2} onChange={(e) => setManualRecipient({ ...manualRecipient, custom2: e.target.value })} />
               <Button type="button" variant="outline" onClick={addRecipient}><Plus className="mr-2 size-4" />Add recipient</Button>
             </div>
 
