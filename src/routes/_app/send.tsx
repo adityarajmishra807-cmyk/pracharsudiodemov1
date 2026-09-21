@@ -499,7 +499,36 @@ function SendPage() {
               </div>
             )}
 
-            <RecipientImporter value={recipients} onChange={setRecipients} max={MAX_RECIPIENTS} />
+            <div className="mb-4">
+              <RecipientImporter value={recipients} onChange={setRecipients} max={MAX_RECIPIENTS} />
+            </div>
+
+            {recipients.length > 0 && (
+              <div className="overflow-hidden rounded-xl border">
+                <div className="max-h-72 overflow-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-surface text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">#</th><th className="px-3 py-2">Phone</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Company</th><th className="px-3 py-2">Custom 1</th><th className="px-3 py-2">Custom 2</th><th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recipients.map((row, index) => (
+                        <tr key={`${row.phone}-${index}`} className="border-t">
+                          <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
+                          <td className="px-3 py-2 font-medium">{row.phone}</td>
+                          <td className="px-3 py-2">{row.name || "—"}</td>
+                          <td className="px-3 py-2">{row.company || "—"}</td>
+                          <td className="px-3 py-2">{row.custom1 || "—"}</td>
+                          <td className="px-3 py-2">{row.custom2 || "—"}</td>
+                          <td className="px-3 py-2 text-right"><Button type="button" variant="ghost" size="sm" onClick={() => removeRecipient(row.phone)}>Remove</Button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
