@@ -5,17 +5,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RecipientImporter, type RecipientRow } from "@/components/RecipientImporter";
+import { apiRequest } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/audiences")({ component: AudiencesPage });
-
-const api = () => String(import.meta.env.VITE_WHATSAPP_API_URL || window.location.origin).replace(/\/+$/, "");
-
-async function request(path: string, init: RequestInit = {}) {
-  const response = await fetch(api() + path, { ...init, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
-  return body;
-}
 
 function AudiencesPage() {
   const [list, setList] = useState<any[]>([]);
@@ -23,7 +15,7 @@ function AudiencesPage() {
   const [description, setDescription] = useState("");
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
 
-  const load = async () => { try { setList(await request("/api/audiences")); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load audiences"); } };
+  const load = async () => { try { setList(await apiRequest("/api/audiences")); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not load audiences"); } };
   useEffect(() => { void load(); }, []);
 
   const create = async () => {
@@ -31,14 +23,14 @@ function AudiencesPage() {
     if (!recipients.length) return toast.error("Add at least one valid recipient.");
     if (recipients.length > 2500) return toast.error("Maximum 2500 recipients per audience.");
     try {
-      await request("/api/audiences", { method: "POST", body: JSON.stringify({ name: name.trim(), description: description.trim(), recipients }) });
+      await apiRequest("/api/audiences", { method: "POST", body: JSON.stringify({ name: name.trim(), description: description.trim(), recipients }) });
       toast.success("Audience created.");
       setName(""); setDescription(""); setRecipients([]); await load();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not create audience"); }
   };
 
   const remove = async (id: string) => {
-    try { await request("/api/audiences/" + encodeURIComponent(id), { method: "DELETE" }); toast.success("Audience deleted."); await load(); }
+    try { await apiRequest("/api/audiences/" + encodeURIComponent(id), { method: "DELETE" }); toast.success("Audience deleted."); await load(); }
     catch (e) { toast.error(e instanceof Error ? e.message : "Could not delete audience"); }
   };
 
