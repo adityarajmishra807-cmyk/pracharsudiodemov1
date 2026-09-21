@@ -668,6 +668,7 @@ function SendPage() {
                 <p className="mt-1 text-right text-[10px] text-muted-foreground">now</p>
               </div>
             </div>
+            </section>
           <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h2 className="font-semibold text-navy">Send controls</h2>
             <p className="mt-1 text-xs text-muted-foreground">
