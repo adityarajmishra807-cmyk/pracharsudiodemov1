@@ -32,7 +32,7 @@ import {
   revokeLicenseFn,
 } from "@/lib/server-license";
 import { getAuthFn } from "@/lib/server-auth";
-import type { LicenseRow } from "@/lib/server-license-store";
+import type { LicenseRow } from "@/server/license-store";
 
 export const Route = createFileRoute("/_app/key-generation")({
   head: () => ({
