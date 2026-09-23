@@ -768,64 +768,7 @@ function SendPage() {
               </div>
             </div>
             </section>
-          <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-navy">Send controls</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Messages are sent sequentially to protect your WhatsApp instance. Media + interactive
-              sends the media first, followed by the interactive message because Evolution exposes
-              media and interactive messages as separate endpoints.
-            </p>
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-medium">Delay between recipients</label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={MIN_DELAY_MS}
-                  max={10000}
-                  step={100}
-                  value={delayMs}
-                  onChange={(e) => setDelayMs(e.target.value)}
-                />
-                <span className="text-xs text-muted-foreground">ms</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Minimum {MIN_DELAY_MS} ms.</p>
-            </div>
-            <Button
-              className="mt-5 w-full"
-              size="lg"
-              disabled={busy || !instance || !recipients.length}
-              onClick={() => void send()}
-            >
-              <Send className="mr-2 size-4" />
-              {busy
-                ? `Sending ${progress.sent + progress.failed}/${progress.total}…`
-                : `Send to ${recipients.length || 0} recipients`}
-            </Button>
-            {busy && (
-              <div className="mt-4 space-y-2">
-                <div className="h-2 overflow-hidden rounded-full bg-surface">
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{
-                      width: `${progress.total ? ((progress.sent + progress.failed) / progress.total) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{progress.sent} sent</span>
-                  <span>{progress.failed} failed</span>
-                </div>
-              </div>
-            )}
-            {result && (
-              <div className="mt-4 flex gap-2 rounded-lg border bg-surface p-3 text-sm">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span>{result}</span>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-border bg-navy p-5 text-white shadow-sm">
+                   <section className="rounded-2xl border border-border bg-navy p-5 text-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wider text-white/60">
               Personalization
             </p>
