@@ -15,7 +15,6 @@ import { webhooksRouter } from './routes/webhooks.routes.js';
 import { audiencesRouter } from './routes/audiences.routes.js';
 import { crmRouter } from './routes/crm.routes.js';
 import { automationRouter } from './routes/automation.routes.js';
-import { authRouter } from './routes/auth.routes.js';
 import { workspaceRouter } from './routes/workspace.routes.js';
 
 assertConfiguration();
@@ -29,7 +28,6 @@ app.get('/api', (_req, res) => res.json({
   version: '1.7.1',
   features: { sessions: true, textMessages: true, mediaMessages: true, textCampaigns: true, mediaCampaigns: true, interactiveCampaigns: true, persistentCampaigns: true },
 }));
-app.use('/api/auth', authRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/campaigns', campaignsRouter);
