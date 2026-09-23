@@ -8,17 +8,6 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  createDeviceId,
-  generateLicenseKey,
-  getLicenseStatus,
-  hydrateLicenseStatuses,
-  normalizeLicenseKey,
-  trialExpiry,
-  type LicenseKey,
-  type LicenseType,
-} from "@/lib/licensing";
-
 /* ---------------------------------- types --------------------------------- */
 
 export type PermissionKey =
@@ -180,6 +169,7 @@ export type Settings = {
 
 export type Session =
   | { kind: "owner" }
+  | { kind: "license"; licenseId: string; licenseType: "permanent" | "trial"; expiresAt: string | null }
   | { kind: "member"; memberId: string }
   | null;
 
@@ -190,8 +180,6 @@ export type State = {
   templates: Template[];
   campaigns: Campaign[];
   automations: Automation[];
-  licenseKeys: LicenseKey[];
-  currentLicenseId: string | null;
   settings: Settings;
   session: Session;
 };
@@ -203,8 +191,6 @@ const emptyState: State = {
   templates: [],
   campaigns: [],
   automations: [],
-  licenseKeys: [],
-  currentLicenseId: null,
   settings: {
     workspaceName: "Prachar Studio",
     ownerName: "",
@@ -230,6 +216,7 @@ type Store = {
   isOwner: boolean;
   currentMember: Member | null;
   can: (key: PermissionKey) => boolean;
+  isLicensed: boolean;
   addMember: (data: Omit<Member, "id" | "createdAt">) => Member;
   updateMember: (id: string, data: Partial<Member>) => void;
   removeMember: (id: string) => void;
@@ -252,14 +239,6 @@ type Store = {
   updateAutomation: (id: string, data: Partial<Automation>) => void;
   removeAutomation: (id: string) => void;
   updateSettings: (data: Partial<Settings>) => void;
-  createLicense: (type: LicenseType) => LicenseKey;
-  activateLicense: (
-    key: string,
-    customerName?: string,
-    customerEmail?: string,
-  ) => { ok: boolean; message: string; license: LicenseKey | null };
-  revokeLicense: (id: string) => void;
-  getCurrentLicense: () => LicenseKey | null;
   resetDemo: () => void;
   memberName: (id: string | null) => string;
 };
@@ -278,7 +257,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState({
           ...emptyState,
           ...parsed,
-          licenseKeys: hydrateLicenseStatuses(parsed.licenseKeys ?? []),
+          session: null,
         });
       }
     } catch {
@@ -301,6 +280,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state.session, state.members]);
 
   const isOwner = state.session?.kind === "owner";
+  const isLicensed = state.session?.kind === "license";
 
   const value: Store = useMemo(() => {
     const memberName = (id: string | null) => {
@@ -313,9 +293,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ready,
       state,
       isOwner,
+      isLicensed,
       currentMember,
       memberName,
-      can: (key) => (isOwner ? true : !!currentMember?.permissions[key]),
+      can: (key) => (isOwner || isLicensed ? true : !!currentMember?.permissions[key]),
       signIn: (session) => patch((s) => ({ ...s, session })),
       signOut: () => patch((s) => ({ ...s, session: null })),
 
@@ -472,98 +453,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       updateSettings: (data) =>
         patch((s) => ({ ...s, settings: { ...s.settings, ...data } })),
-      createLicense: (type) => {
-        const license: LicenseKey = {
-          id: uid(),
-          key: generateLicenseKey(),
-          type,
-          status: "unused",
-          createdAt: now(),
-          activatedAt: null,
-          expiresAt: null,
-          customerName: "",
-          customerEmail: "",
-          deviceId: null,
-        };
-        patch((s) => ({ ...s, licenseKeys: [license, ...s.licenseKeys] }));
-        return license;
-      },
-
-      activateLicense: (key, customerName = "", customerEmail = "") => {
-        const normalized = normalizeLicenseKey(key);
-        const deviceId = createDeviceId();
-        const current = hydrateLicenseStatuses(state.licenseKeys).find(
-          (license) => normalizeLicenseKey(license.key) === normalized,
-        );
-
-        if (!current) {
-          return { ok: false, message: "That license key was not found.", license: null };
-        }
-
-        const currentStatus = getLicenseStatus(current);
-        if (currentStatus === "revoked") {
-          return { ok: false, message: "That license has been revoked.", license: null };
-        }
-        if (currentStatus === "expired") {
-          return { ok: false, message: "That license has expired.", license: null };
-        }
-        if (current.status === "active" && current.deviceId && current.deviceId !== deviceId) {
-          return {
-            ok: false,
-            message: "That license is already activated on another device.",
-            license: null,
-          };
-        }
-
-        const activatedAt = current.activatedAt ?? now();
-        const expiresAt =
-          current.type === "trial"
-            ? current.expiresAt ?? trialExpiry(new Date(activatedAt))
-            : null;
-
-        const updated: LicenseKey = {
-          ...current,
-          status: "active",
-          activatedAt,
-          expiresAt,
-          customerName: customerName.trim(),
-          customerEmail: customerEmail.trim(),
-          deviceId,
-        };
-
-        patch((s) => ({
-          ...s,
-          licenseKeys: s.licenseKeys.map((license) =>
-            license.id === updated.id ? updated : license,
-          ),
-          currentLicenseId: updated.id,
-        }));
-
-        return {
-          ok: true,
-          message: "License activated successfully.",
-          license: updated,
-        };
-      },
-
-      revokeLicense: (id) =>
-        patch((s) => ({
-          ...s,
-          licenseKeys: s.licenseKeys.map((license) =>
-            license.id === id ? { ...license, status: "revoked" } : license,
-          ),
-          currentLicenseId: s.currentLicenseId === id ? null : s.currentLicenseId,
-        })),
-
-      getCurrentLicense: () => {
-        const license = state.licenseKeys.find((item) => item.id === state.currentLicenseId);
-        if (!license || getLicenseStatus(license) !== "active") return null;
-        return license;
-      },
-
       resetDemo: () => setState({ ...emptyState, session: { kind: "owner" } }),
     };
-  }, [state, ready, isOwner, currentMember, patch]);
+  }, [state, ready, isOwner, isLicensed, currentMember, patch]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
