@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
+import { ownerLoginFn } from "@/server/auth";
+import { activateLicenseFn } from "@/server/license";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -16,13 +18,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Enter the Prachar Studio workspace to manage leads, WhatsApp conversations, templates, campaigns and team permissions.",
+          "Secure owner and customer access to the Prachar Studio WhatsApp CRM and admin panel.",
       },
       { property: "og:title", content: "Sign in — Prachar Studio WhatsApp CRM" },
       {
         property: "og:description",
         content:
-          "Owner and member access to the Prachar Studio WhatsApp CRM and admin panel.",
+          "Secure owner and licensed customer access to the Prachar Studio WhatsApp CRM and admin panel.",
       },
     ],
   }),
@@ -30,31 +32,78 @@ export const Route = createFileRoute("/")({
 });
 
 function EntryScreen() {
-  const { ready, state, signIn, updateSettings, activateLicense, getCurrentLicense } = useStore();
+  const { ready, state, updateSettings } = useStore();
   const router = useRouter();
-  const [ownerName, setOwnerName] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [licenseKey, setLicenseKey] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [licenseMessage, setLicenseMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
-  const currentLicense = getCurrentLicense();
+  const [ownerMessage, setOwnerMessage] = useState<string | null>(null);
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  const [licenseLoading, setLicenseLoading] = useState(false);
 
-  const members = state.members.filter((m) => m.status !== "suspended");
   const canEnter = ready && termsAccepted;
 
-  const enterAsOwner = () => {
-    if (!canEnter) return;
-    const name = ownerName.trim() || state.settings.ownerName;
-    if (name && name !== state.settings.ownerName) updateSettings({ ownerName: name });
-    signIn({ kind: "owner" });
-    void router.navigate({ to: "/dashboard" });
+  const enterAsOwner = async () => {
+    if (!canEnter || ownerLoading) return;
+    setOwnerLoading(true);
+    setOwnerMessage(null);
+
+    try {
+      const result = await ownerLoginFn({
+        data: {
+          email: state.settings.ownerEmail.trim(),
+          password: ownerPassword,
+        },
+      });
+
+      if (!result.ok) {
+        setOwnerMessage(result.message);
+        return;
+      }
+
+      void router.navigate({ to: "/dashboard" });
+    } catch (error) {
+      setOwnerMessage(error instanceof Error ? error.message : "Owner login failed.");
+    } finally {
+      setOwnerLoading(false);
+    }
   };
 
-  const enterAsMember = (memberId: string) => {
-    if (!canEnter) return;
-    signIn({ kind: "member", memberId });
-    void router.navigate({ to: "/dashboard" });
+  const activate = async () => {
+    if (!canEnter || licenseLoading) return;
+    if (!licenseKey.trim()) {
+      setLicenseMessage({ type: "error", text: "Enter a license key first." });
+      return;
+    }
+
+    setLicenseLoading(true);
+    setLicenseMessage(null);
+
+    try {
+      const result = await activateLicenseFn({
+        data: { key: licenseKey, customerName, customerEmail },
+      });
+
+      setLicenseMessage({
+        type: "success",
+        text:
+          result.license.type === "trial"
+            ? "7-day trial activated successfully."
+            : "Permanent license activated successfully.",
+      });
+      setLicenseKey("");
+      void router.navigate({ to: "/dashboard" });
+    } catch (error) {
+      setLicenseMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "License activation failed.",
+      });
+    } finally {
+      setLicenseLoading(false);
+    }
   };
 
   return (
@@ -66,10 +115,14 @@ function EntryScreen() {
             WhatsApp CRM & admin workspace
           </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-white/70 lg:text-base">
-            Leads, conversations, templates, campaigns, automations and team permissions in one place — built for the Prachar Studio team.
+            Leads, conversations, templates, campaigns, automations and team permissions in one place.
           </p>
           <ul className="mt-6 space-y-2 text-sm text-white/75">
-            {["Owner-controlled team permissions", "WhatsApp-style inbox with template insertion", "Campaign and automation builders"].map((item) => (
+            {[
+              "Server-side owner authentication",
+              "Central license validation",
+              "Owner-controlled workspace permissions",
+            ].map((item) => (
               <li key={item} className="flex items-start gap-2">
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
                 {item}
@@ -77,66 +130,67 @@ function EntryScreen() {
             ))}
           </ul>
         </div>
-        <p className="mt-10 text-xs text-white/45 lg:mt-0">Frontend demo · data stays in this browser</p>
+        <p className="mt-10 text-xs text-white/45 lg:mt-0">
+          Secure application access · licenses are validated on the server
+        </p>
       </section>
 
       <section className="flex flex-1 items-center justify-center bg-white px-5 py-10 lg:px-12">
         <div className="w-full max-w-sm">
           <h2 className="text-xl font-bold text-navy">Enter the workspace</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">Choose how you want to review the demo.</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Use owner credentials or a customer license key.
+          </p>
 
           <div className="mt-6 rounded-lg border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-navy">
               <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
               Owner access
             </div>
-            <div className="mt-3 space-y-2">
-              <Label htmlFor="owner-name">Your name</Label>
-              <Input
-                id="owner-name"
-                autoComplete="name"
-                placeholder={state.settings.ownerName || "e.g. Workspace owner"}
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-                className="h-11"
-              />
-              <p className="text-xs text-muted-foreground">Used on your profile inside the workspace.</p>
+
+            <div className="mt-3 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="owner-email">Owner email</Label>
+                <Input
+                  id="owner-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  placeholder="owner@example.com"
+                  value={state.settings.ownerEmail}
+                  onChange={(e) => updateSettings({ ownerEmail: e.target.value })}
+                  className="h-11"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="owner-password">Owner password</Label>
+                <Input
+                  id="owner-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter owner password"
+                  value={ownerPassword}
+                  onChange={(e) => setOwnerPassword(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+
+              {ownerMessage ? (
+                <p className="text-xs font-medium text-destructive" role="alert">
+                  {ownerMessage}
+                </p>
+              ) : null}
             </div>
-            <Button onClick={enterAsOwner} className="mt-4 h-11 w-full" disabled={!canEnter}>
-              Continue as owner
+
+            <Button
+              onClick={() => void enterAsOwner()}
+              className="mt-4 h-11 w-full"
+              disabled={!canEnter || ownerLoading}
+            >
+              {ownerLoading ? "Signing in…" : "Sign in as owner"}
               <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
-          </div>
-
-          <div className="mt-4 rounded-lg border border-border bg-surface p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
-              <Users className="size-4 text-primary" aria-hidden="true" />
-              Member access
-            </div>
-            {members.length === 0 ? (
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                No team members exist yet. Sign in as owner and add members in Team Management to test permission-based access.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {members.map((member) => (
-                  <li key={member.id}>
-                    <button
-                      type="button"
-                      onClick={() => enterAsMember(member.id)}
-                      disabled={!canEnter}
-                      className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-foreground">{member.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{member.jobTitle || member.email}</span>
-                      </span>
-                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
@@ -145,101 +199,83 @@ function EntryScreen() {
               Customer license
             </div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Enter the license key provided by the Prachar Studio owner. Trial access lasts 7 days from activation.
+              Enter the license key provided by the Prachar Studio owner. A trial key lasts 7 days from activation.
             </p>
 
-            {currentLicense ? (
-              <div className="mt-3 rounded-md border border-primary/20 bg-white p-3">
-                <p className="text-xs font-semibold text-primary">License active</p>
-                <p className="mt-1 break-all font-mono text-xs font-medium text-navy">{currentLicense.key}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {currentLicense.type === "trial" ? "7-day trial" : "Permanent"} · Expires {currentLicense.expiresAt ? new Date(currentLicense.expiresAt).toLocaleDateString() : "Never"}
-                </p>
-                <Button
-                  onClick={() => {
-                    if (!termsAccepted) return;
-                    signIn({ kind: "owner" });
-                    void router.navigate({ to: "/dashboard" });
+            <div className="mt-3 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="license-key">License key</Label>
+                <Input
+                  id="license-key"
+                  className="h-11 font-mono uppercase"
+                  placeholder="PRA-XXXXX-XXXXX-XXXXX-XXXXX"
+                  value={licenseKey}
+                  onChange={(e) => {
+                    setLicenseKey(e.target.value.toUpperCase());
+                    setLicenseMessage(null);
                   }}
-                  className="mt-3 h-10 w-full"
-                  disabled={!canEnter}
-                >
-                  Continue with active license
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Button>
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                />
               </div>
-            ) : (
-              <>
-                <div className="mt-3 space-y-2">
-                  <Label htmlFor="license-key">License key</Label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-name">Customer name</Label>
                   <Input
-                    id="license-key"
-                    className="h-11 font-mono uppercase"
-                    placeholder="PRA-XXXX-XXXX-XXXX-XXXX"
-                    value={licenseKey}
-                    onChange={(e) => {
-                      setLicenseKey(e.target.value);
-                      setLicenseMessage(null);
-                    }}
-                    autoCapitalize="characters"
-                    spellCheck={false}
+                    id="customer-name"
+                    className="h-11"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Your name"
                   />
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-name">Customer name</Label>
-                    <Input
-                      id="customer-name"
-                      className="h-11"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Your name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-email">Email</Label>
-                    <Input
-                      id="customer-email"
-                      className="h-11"
-                      type="email"
-                      inputMode="email"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="you@example.com"
-                    />
-                  </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-email">Email</Label>
+                  <Input
+                    id="customer-email"
+                    className="h-11"
+                    type="email"
+                    inputMode="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
                 </div>
-                <Button
-                  onClick={() => {
-                    if (!licenseKey.trim()) {
-                      setLicenseMessage({ type: "error", text: "Enter a license key first." });
-                      return;
-                    }
-                    const result = activateLicense(licenseKey, customerName, customerEmail);
-                    setLicenseMessage({
-                      type: result.ok ? "success" : "error",
-                      text: result.message,
-                    });
-                    if (result.ok) setLicenseKey("");
-                  }}
-                  className="mt-3 h-11 w-full"
-                  disabled={!canEnter}
-                >
-                  Activate license
-                  <ShieldCheck className="size-4" aria-hidden="true" />
-                </Button>
-                {licenseMessage ? (
-                  <p
-                    className={licenseMessage.type === "success"
-                      ? "mt-2 text-xs font-medium text-primary"
-                      : "mt-2 text-xs font-medium text-destructive"}
-                    role="status"
-                  >
-                    {licenseMessage.text}
-                  </p>
-                ) : null}
-              </>
-            )}
+              </div>
+            </div>
+
+            <Button
+              onClick={() => void activate()}
+              className="mt-3 h-11 w-full"
+              disabled={!canEnter || licenseLoading}
+            >
+              {licenseLoading ? "Activating…" : "Activate license"}
+              <ShieldCheck className="size-4" aria-hidden="true" />
+            </Button>
+
+            {licenseMessage ? (
+              <p
+                className={
+                  licenseMessage.type === "success"
+                    ? "mt-2 text-xs font-medium text-primary"
+                    : "mt-2 text-xs font-medium text-destructive"
+                }
+                role="status"
+              >
+                {licenseMessage.text}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-surface p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
+              <Users className="size-4 text-primary" aria-hidden="true" />
+              Team access
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Team members are controlled by the workspace owner. Customer access is granted through a valid license key.
+            </p>
           </div>
 
           <div className="mt-5 rounded-lg border border-border bg-surface p-4">
@@ -252,11 +288,21 @@ function EntryScreen() {
                 className="mt-0.5"
               />
               <div className="min-w-0">
-                <Label htmlFor="accept-terms" className="cursor-pointer text-sm font-medium leading-5 text-foreground">
-                  I have read and agree to the <Link to="/terms" className="font-semibold text-navy underline underline-offset-2 hover:text-primary">Terms & Conditions</Link>.
+                <Label
+                  htmlFor="accept-terms"
+                  className="cursor-pointer text-sm font-medium leading-5 text-foreground"
+                >
+                  I have read and agree to the{" "}
+                  <Link
+                    to="/terms"
+                    className="font-semibold text-navy underline underline-offset-2 hover:text-primary"
+                  >
+                    Terms & Conditions
+                  </Link>
+                  .
                 </Label>
                 <p id="terms-description" className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  This includes the WhatsApp account and number risks, bulk messaging restrictions, acceptable-use rules, and your responsibility for messages sent through Prachar Studio.
+                  This includes WhatsApp account and number risks, bulk messaging restrictions, acceptable-use rules, and your responsibility for messages sent through Prachar Studio.
                 </p>
               </div>
             </div>
@@ -269,9 +315,11 @@ function EntryScreen() {
           ) : null}
 
           <div className="mt-6 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-            <Link to="/terms" className="font-medium text-navy transition-colors hover:text-primary">Terms & Conditions</Link>
+            <Link to="/terms" className="font-medium text-navy transition-colors hover:text-primary">
+              Terms & Conditions
+            </Link>
             <span aria-hidden="true">•</span>
-            <span>Your use of the demo is subject to these terms.</span>
+            <span>Secure server-validated access.</span>
           </div>
         </div>
       </section>
