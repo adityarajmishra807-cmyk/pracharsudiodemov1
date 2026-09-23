@@ -5,8 +5,6 @@ import { cancelCampaign, enqueueCampaign, getQueueMonitor, getQueueSize, pauseCa
 import { enforceCampaignSafety } from '../services/campaign.safety.js';
 
 export const campaignJobsRouter = Router();
-import { authUser, requirePermission } from './auth.routes.js';
-campaignJobsRouter.use(authUser);
 
 const MAX_RECIPIENTS = 250;
 const MIN_DELAY_MS = 1500;
@@ -43,11 +41,11 @@ function validateCampaign(body) {
   return { type, instance, recipients, audienceId, delayMs, payload };
 }
 
-campaignJobsRouter.get('/', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.get('/', async (req, res, next) => {
   try { res.json(await listCampaigns({ limit: req.query.limit })); } catch (error) { next(error); }
 });
 
-campaignJobsRouter.get('/analytics', requirePermission('analytics'), async (req, res, next) => {
+campaignJobsRouter.get('/analytics', async (req, res, next) => {
   try {
     const days = Math.max(7, Math.min(Number(req.query.days) || 30, 90));
 
@@ -207,11 +205,11 @@ campaignJobsRouter.get('/analytics', requirePermission('analytics'), async (req,
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.get('/queue/status', requirePermission('campaigns'), async (_req, res, next) => {
+campaignJobsRouter.get('/queue/status', async (_req, res, next) => {
   try { return res.json(await getQueueMonitor()); } catch (error) { return next(error); }
 });
 
-campaignJobsRouter.post('/:id/retry-failed', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.post('/:id/retry-failed', async (req, res, next) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found.' });
@@ -231,7 +229,7 @@ campaignJobsRouter.post('/:id/retry-failed', requirePermission('campaigns'), asy
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.get('/:id', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.get('/:id', async (req, res, next) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found.' });
@@ -239,7 +237,7 @@ campaignJobsRouter.get('/:id', requirePermission('campaigns'), async (req, res, 
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.post('/:id/pause', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.post('/:id/pause', async (req, res, next) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found.' });
@@ -249,7 +247,7 @@ campaignJobsRouter.post('/:id/pause', requirePermission('campaigns'), async (req
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.post('/:id/resume', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.post('/:id/resume', async (req, res, next) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found.' });
@@ -259,7 +257,7 @@ campaignJobsRouter.post('/:id/resume', requirePermission('campaigns'), async (re
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.post('/:id/cancel', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.post('/:id/cancel', async (req, res, next) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, message: 'Campaign not found.' });
@@ -269,7 +267,7 @@ campaignJobsRouter.post('/:id/cancel', requirePermission('campaigns'), async (re
   } catch (error) { next(error); }
 });
 
-campaignJobsRouter.post('/', requirePermission('campaigns'), async (req, res, next) => {
+campaignJobsRouter.post('/', async (req, res, next) => {
   try {
     const input = validateCampaign(req.body);
     if (input.audienceId) {
