@@ -8,6 +8,17 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  createDeviceId,
+  generateLicenseKey,
+  getLicenseStatus,
+  hydrateLicenseStatuses,
+  normalizeLicenseKey,
+  trialExpiry,
+  type LicenseKey,
+  type LicenseType,
+} from "@/lib/licensing";
+
 /* ---------------------------------- types --------------------------------- */
 
 export type PermissionKey =
@@ -179,6 +190,8 @@ export type State = {
   templates: Template[];
   campaigns: Campaign[];
   automations: Automation[];
+  licenseKeys: LicenseKey[];
+  currentLicenseId: string | null;
   settings: Settings;
   session: Session;
 };
@@ -190,6 +203,8 @@ const emptyState: State = {
   templates: [],
   campaigns: [],
   automations: [],
+  licenseKeys: [],
+  currentLicenseId: null,
   settings: {
     workspaceName: "Prachar Studio",
     ownerName: "",
@@ -237,6 +252,14 @@ type Store = {
   updateAutomation: (id: string, data: Partial<Automation>) => void;
   removeAutomation: (id: string) => void;
   updateSettings: (data: Partial<Settings>) => void;
+  createLicense: (type: LicenseType) => LicenseKey;
+  activateLicense: (
+    key: string,
+    customerName?: string,
+    customerEmail?: string,
+  ) => { ok: boolean; message: string; license: LicenseKey | null };
+  revokeLicense: (id: string) => void;
+  getCurrentLicense: () => LicenseKey | null;
   resetDemo: () => void;
   memberName: (id: string | null) => string;
 };
@@ -250,7 +273,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setState({ ...emptyState, ...(JSON.parse(raw) as State) });
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<State>;
+        setState({
+          ...emptyState,
+          ...parsed,
+          licenseKeys: hydrateLicenseStatuses(parsed.licenseKeys ?? []),
+        });
+      }
     } catch {
       /* ignore corrupt storage */
     }
