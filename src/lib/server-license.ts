@@ -7,8 +7,8 @@ import {
   listLicenses,
   normalizeLicenseKey,
   revokeLicense,
-} from "./license-store";
-import { useAppSession } from "./session";
+} from "../server/license-store";
+import { useAppSession } from "../server/session";
 
 const licenseTypeSchema = z.object({
   type: z.enum(["permanent", "trial"]),
