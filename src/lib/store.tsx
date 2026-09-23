@@ -472,6 +472,95 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       updateSettings: (data) =>
         patch((s) => ({ ...s, settings: { ...s.settings, ...data } })),
+      createLicense: (type) => {
+        const license: LicenseKey = {
+          id: uid(),
+          key: generateLicenseKey(),
+          type,
+          status: "unused",
+          createdAt: now(),
+          activatedAt: null,
+          expiresAt: null,
+          customerName: "",
+          customerEmail: "",
+          deviceId: null,
+        };
+        patch((s) => ({ ...s, licenseKeys: [license, ...s.licenseKeys] }));
+        return license;
+      },
+
+      activateLicense: (key, customerName = "", customerEmail = "") => {
+        const normalized = normalizeLicenseKey(key);
+        const deviceId = createDeviceId();
+        const current = hydrateLicenseStatuses(state.licenseKeys).find(
+          (license) => normalizeLicenseKey(license.key) === normalized,
+        );
+
+        if (!current) {
+          return { ok: false, message: "That license key was not found.", license: null };
+        }
+
+        const currentStatus = getLicenseStatus(current);
+        if (currentStatus === "revoked") {
+          return { ok: false, message: "That license has been revoked.", license: null };
+        }
+        if (currentStatus === "expired") {
+          return { ok: false, message: "That license has expired.", license: null };
+        }
+        if (current.status === "active" && current.deviceId && current.deviceId !== deviceId) {
+          return {
+            ok: false,
+            message: "That license is already activated on another device.",
+            license: null,
+          };
+        }
+
+        const activatedAt = current.activatedAt ?? now();
+        const expiresAt =
+          current.type === "trial"
+            ? current.expiresAt ?? trialExpiry(new Date(activatedAt))
+            : null;
+
+        const updated: LicenseKey = {
+          ...current,
+          status: "active",
+          activatedAt,
+          expiresAt,
+          customerName: customerName.trim(),
+          customerEmail: customerEmail.trim(),
+          deviceId,
+        };
+
+        patch((s) => ({
+          ...s,
+          licenseKeys: s.licenseKeys.map((license) =>
+            license.id === updated.id ? updated : license,
+          ),
+          currentLicenseId: updated.id,
+        }));
+
+        return {
+          ok: true,
+          message: "License activated successfully.",
+          license: updated,
+        };
+      },
+
+      revokeLicense: (id) =>
+        patch((s) => ({
+          ...s,
+          licenseKeys: s.licenseKeys.map((license) =>
+            license.id === id ? { ...license, status: "revoked" } : license,
+          ),
+          currentLicenseId: s.currentLicenseId === id ? null : s.currentLicenseId,
+        })),
+
+      getCurrentLicense: () => {
+        const license = state.licenseKeys.find((item) => item.id === state.currentLicenseId);
+        if (!license || getLicenseStatus(license) !== "active") return null;
+        return license;
+      },
+
       resetDemo: () => setState({ ...emptyState, session: { kind: "owner" } }),
     };
   }, [state, ready, isOwner, currentMember, patch]);
