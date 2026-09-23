@@ -61,7 +61,7 @@ crmRouter.put('/leads/:id', async(req,res,next)=>{
   } catch(e){next(e);}
 });
 
-crmRouter.delete('/leads/:id',requirePermission('leadsEdit'),async(req,res,next)=>{
+crmRouter.delete('/leads/:id',async(req,res,next)=>{
   try { const r=await pool.query('DELETE FROM leads WHERE id=$1',[req.params.id]); if(!r.rowCount)return res.status(404).json({ok:false,message:'Lead not found.'}); res.status(204).end(); } catch(e){next(e);}
 });
 
