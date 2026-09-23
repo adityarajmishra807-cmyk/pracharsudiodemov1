@@ -1,15 +1,13 @@
 import { Router } from 'express';
-import { authUser, requirePermission } from './auth.routes.js';
 import { pool } from '../services/db.js';
 import crypto from 'node:crypto';
 
 export const crmRouter = Router();
-crmRouter.use(authUser);
 const makeId = (prefix) => prefix + '_' + Date.now().toString(36) + '_' + crypto.randomBytes(5).toString('hex');
 const clean = (v) => String(v ?? '').trim();
 const statuses = new Set(['new','contacted','qualified','won','lost']);
 
-crmRouter.get('/leads', requirePermission('leadsView'), async (_req,res,next) => {
+crmRouter.get('/leads', async (_req,res,next) => {
   try {
     const { rows } = await pool.query(`SELECT l.*,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'at',a.created_at,'text',a.text) ORDER BY a.created_at DESC)
@@ -19,7 +17,7 @@ crmRouter.get('/leads', requirePermission('leadsView'), async (_req,res,next) =>
   } catch(e){ next(e); }
 });
 
-crmRouter.get('/leads/:id', requirePermission('leadsView'), async (req,res,next)=>{
+crmRouter.get('/leads/:id', async (req,res,next)=>{
   try {
     const r=await pool.query('SELECT * FROM leads WHERE id=$1',[req.params.id]);
     if(!r.rows[0]) return res.status(404).json({ok:false,message:'Lead not found.'});
@@ -29,7 +27,7 @@ crmRouter.get('/leads/:id', requirePermission('leadsView'), async (req,res,next)
   } catch(e){next(e);}
 });
 
-crmRouter.post('/leads', requirePermission('leadsEdit'), async(req,res,next)=>{
+crmRouter.post('/leads', async(req,res,next)=>{
   try {
     const b=req.body||{}, name=clean(b.name);
     if(!name) return res.status(400).json({ok:false,message:'Lead name is required.'});
@@ -41,7 +39,7 @@ crmRouter.post('/leads', requirePermission('leadsEdit'), async(req,res,next)=>{
   } catch(e){next(e);}
 });
 
-crmRouter.put('/leads/:id', requirePermission('leadsEdit'), async(req,res,next)=>{
+crmRouter.put('/leads/:id', async(req,res,next)=>{
   try {
     const current=await pool.query('SELECT * FROM leads WHERE id=$1',[req.params.id]);
     if(!current.rows[0]) return res.status(404).json({ok:false,message:'Lead not found.'});
@@ -67,7 +65,7 @@ crmRouter.delete('/leads/:id',requirePermission('leadsEdit'),async(req,res,next)
   try { const r=await pool.query('DELETE FROM leads WHERE id=$1',[req.params.id]); if(!r.rowCount)return res.status(404).json({ok:false,message:'Lead not found.'}); res.status(204).end(); } catch(e){next(e);}
 });
 
-crmRouter.get('/stats', requirePermission('dashboard'), async(_req,res,next)=>{
+crmRouter.get('/stats', async(_req,res,next)=>{
   try{
     const [l,m,ca]=await Promise.all([
       pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE status='won')::int won FROM leads`),
