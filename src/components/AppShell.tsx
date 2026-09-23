@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Bot, Building2, LayoutDashboard, Megaphone, MoreHorizontal, Send, ContactRound, Settings, Smartphone, Users, FileText, UserRound } from "lucide-react";
+import { BarChart3, Bot, Building2, LayoutDashboard, Megaphone, MoreHorizontal, Send, ContactRound, Settings, Smartphone, Users, FileText, UserRound, KeyRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PracharChatbot } from "@/components/ai/PracharChatbot";
 import { Logo } from "@/components/Logo";
@@ -20,6 +20,7 @@ const NAV: NavItem[] = [
   { to: "/automations", label: "Automations", icon: Bot },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/team", label: "Team", icon: Users },
+  { to: "/key-generation", label: "Key generation", icon: KeyRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 function useVisibleNav() { return NAV; }
