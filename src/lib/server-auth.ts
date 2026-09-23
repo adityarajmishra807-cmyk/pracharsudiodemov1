@@ -2,8 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 
-import { useAppSession } from "./session";
-import { getLicenseById } from "./license-store";
+import { useAppSession } from "../server/session";
+import { getLicenseById } from "../server/license-store";
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(254),
