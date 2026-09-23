@@ -64,19 +64,6 @@ function KeyGenerationPage() {
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  if (!isOwner) {
-    return (
-      <div className="space-y-5">
-        <PageHeader title="Key generation" />
-        <EmptyState
-          icon={LockKeyhole}
-          title="Owner only"
-          description="License key generation is restricted to the workspace owner."
-        />
-      </div>
-    );
-  }
-
   const licenses = useMemo(
     () =>
       state.licenseKeys
@@ -97,6 +84,20 @@ function KeyGenerationPage() {
         }),
     [search, state.licenseKeys],
   );
+
+  if (!isOwner) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Key generation" />
+        <EmptyState
+          icon={LockKeyhole}
+          title="Owner only"
+          description="License key generation is restricted to the workspace owner."
+        />
+      </div>
+    );
+  }
+
 
   const total = state.licenseKeys.length;
   const active = state.licenseKeys.filter((license) => getLicenseStatus(license) === "active").length;
