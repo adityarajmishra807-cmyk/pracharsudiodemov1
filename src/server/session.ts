@@ -13,7 +13,7 @@ export function useAppSession() {
   }
 
   return useSession<AppSessionData>({
-    name: "__Host-prachar-session",
+    name: process.env.NODE_ENV === "production" ? "__Host-prachar-session" : "prachar-session",
     password,
     cookie: {
       secure: process.env.NODE_ENV === "production",
