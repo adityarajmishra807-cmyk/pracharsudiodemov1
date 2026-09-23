@@ -1,4 +1,3 @@
-import { clearAuthToken } from "./auth-api";
 import {
   createContext,
   useCallback,
@@ -288,7 +287,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       memberName,
       can: (key) => (isOwner ? true : !!currentMember?.permissions[key]),
       signIn: (session) => patch((s) => ({ ...s, session })),
-      signOut: () => { clearAuthToken(); patch((s) => ({ ...s, session: null })); },
+      signOut: () => patch((s) => ({ ...s, session: null })),
 
       addMember: (data) => {
         const member: Member = { ...data, id: uid(), createdAt: now() };
