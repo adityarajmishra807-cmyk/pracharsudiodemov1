@@ -30,9 +30,9 @@ import {
   generateLicenseFn,
   listLicensesFn,
   revokeLicenseFn,
-} from "@/server/license";
+} from "@/lib/server-license";
 import { getAuthFn } from "@/server/auth";
-import type { LicenseRow } from "@/server/license-store";
+import type { LicenseRow } from "@/lib/server-license-store";
 
 export const Route = createFileRoute("/_app/key-generation")({
   head: () => ({
