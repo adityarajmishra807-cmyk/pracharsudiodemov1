@@ -49,7 +49,7 @@ export const Route = createFileRoute("/_app/key-generation")({
 });
 
 function statusLabel(status: LicenseStatus) {
-  return status[0].toUpperCase() + status.slice(1);
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function statusVariant(status: LicenseStatus): "default" | "secondary" | "destructive" | "outline" {
