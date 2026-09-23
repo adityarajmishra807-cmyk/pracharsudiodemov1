@@ -133,7 +133,19 @@ export async function connectInstance(instance) {
   }
   return (await request({ method: 'GET', url: `/instance/connect/${encodeURIComponent(instance)}` })).data;
 }
-export const restartInstance = (instance) => request({ method: 'PUT', url: `/instance/restart/${encodeURIComponent(instance)}` }).then((r) => r.data);
+export async function restartInstance(instance) {
+  const url = `/instance/restart/${encodeURIComponent(instance)}`;
+  try {
+    return (await request({ method: 'PUT', url })).data;
+  } catch (error) {
+    // Some Evolution deployments expose restart as POST even though the v2
+    // documentation specifies PUT. Fall back for method-not-found responses.
+    if (error instanceof EvolutionError && [404, 405].includes(error.status)) {
+      return (await request({ method: 'POST', url })).data;
+    }
+    throw error;
+  }
+}
 
 function cleanNumber(value) {
   const raw = String(value || '').trim();
