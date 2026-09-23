@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
-import { ownerLoginFn } from "@/server/auth";
+import { ownerLoginFn } from "@/lib/server-auth";
 import { activateLicenseFn } from "@/server/license";
 
 export const Route = createFileRoute("/")({
