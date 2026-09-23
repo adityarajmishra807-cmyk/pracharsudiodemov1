@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { authUser, requirePermission } from './auth.routes.js';
 import { pool } from '../services/db.js';
 export const automationRouter=Router();
-automationRouter.use(authUser);
-automationRouter.use(requirePermission('automations'));
 const clean=v=>String(v??'').trim();
 const defaultTrigger={id:'trigger',type:'trigger',label:'Trigger',config:{event:'lead_created'}};
 const mapRow=r=>({id:r.id,name:r.name,status:r.status,nodes:r.nodes||[],createdAt:r.created_at});
