@@ -30,10 +30,15 @@ export const Route = createFileRoute("/")({
 });
 
 function EntryScreen() {
-  const { ready, state, signIn, updateSettings } = useStore();
+  const { ready, state, signIn, updateSettings, activateLicense, getCurrentLicense } = useStore();
   const router = useRouter();
   const [ownerName, setOwnerName] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [licenseKey, setLicenseKey] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [licenseMessage, setLicenseMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const currentLicense = getCurrentLicense();
 
   const members = state.members.filter((m) => m.status !== "suspended");
   const canEnter = ready && termsAccepted;
@@ -131,6 +136,109 @@ function EntryScreen() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-navy">
+              <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+              Customer license
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Enter the license key provided by the Prachar Studio owner. Trial access lasts 7 days from activation.
+            </p>
+
+            {currentLicense ? (
+              <div className="mt-3 rounded-md border border-primary/20 bg-white p-3">
+                <p className="text-xs font-semibold text-primary">License active</p>
+                <p className="mt-1 break-all font-mono text-xs font-medium text-navy">{currentLicense.key}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {currentLicense.type === "trial" ? "7-day trial" : "Permanent"} · Expires {currentLicense.expiresAt ? new Date(currentLicense.expiresAt).toLocaleDateString() : "Never"}
+                </p>
+                <Button
+                  onClick={() => {
+                    if (!termsAccepted) return;
+                    signIn({ kind: "owner" });
+                    void router.navigate({ to: "/dashboard" });
+                  }}
+                  className="mt-3 h-10 w-full"
+                  disabled={!canEnter}
+                >
+                  Continue with active license
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="mt-3 space-y-2">
+                  <Label htmlFor="license-key">License key</Label>
+                  <Input
+                    id="license-key"
+                    className="h-11 font-mono uppercase"
+                    placeholder="PRA-XXXX-XXXX-XXXX-XXXX"
+                    value={licenseKey}
+                    onChange={(e) => {
+                      setLicenseKey(e.target.value);
+                      setLicenseMessage(null);
+                    }}
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                  />
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="customer-name">Customer name</Label>
+                    <Input
+                      id="customer-name"
+                      className="h-11"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="customer-email">Email</Label>
+                    <Input
+                      id="customer-email"
+                      className="h-11"
+                      type="email"
+                      inputMode="email"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    if (!licenseKey.trim()) {
+                      setLicenseMessage({ type: "error", text: "Enter a license key first." });
+                      return;
+                    }
+                    const result = activateLicense(licenseKey, customerName, customerEmail);
+                    setLicenseMessage({
+                      type: result.ok ? "success" : "error",
+                      text: result.message,
+                    });
+                    if (result.ok) setLicenseKey("");
+                  }}
+                  className="mt-3 h-11 w-full"
+                  disabled={!canEnter}
+                >
+                  Activate license
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                </Button>
+                {licenseMessage ? (
+                  <p
+                    className={licenseMessage.type === "success"
+                      ? "mt-2 text-xs font-medium text-primary"
+                      : "mt-2 text-xs font-medium text-destructive"}
+                    role="status"
+                  >
+                    {licenseMessage.text}
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
 
