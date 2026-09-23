@@ -453,7 +453,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       updateSettings: (data) =>
         patch((s) => ({ ...s, settings: { ...s.settings, ...data } })),
-      resetDemo: () => setState({ ...emptyState, session: { kind: "owner" } }),
+      resetDemo: () => setState({ ...emptyState, session: null }),
     };
   }, [state, ready, isOwner, isLicensed, currentMember, patch]);
 
