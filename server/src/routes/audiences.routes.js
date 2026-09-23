@@ -1,10 +1,7 @@
-import { authUser, requirePermission } from './auth.routes.js';
 import { Router } from 'express';
 import { pool } from '../services/db.js';
 
 export const audiencesRouter = Router();
-audiencesRouter.use(authUser);
-
 
 const MAX_RECIPIENTS = 2500;
 const PHONE_HEADERS = ['phone', 'number', 'mobile', 'mobilenumber', 'whatsapp', 'whatsappnumber', 'contact', 'phonenumber'];
@@ -50,7 +47,7 @@ async function getAudience(id) {
   };
 }
 
-audiencesRouter.get('/', requirePermission('campaigns'), async (_req, res, next) => {
+audiencesRouter.get('/', async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT a.id,a.name,a.description,a.created_at,a.updated_at,COUNT(ar.recipient_index)::int AS total
@@ -61,7 +58,7 @@ audiencesRouter.get('/', requirePermission('campaigns'), async (_req, res, next)
   } catch (error) { next(error); }
 });
 
-audiencesRouter.get('/:id', requirePermission('campaigns'), async (req, res, next) => {
+audiencesRouter.get('/:id', async (req, res, next) => {
   try {
     const audience = await getAudience(req.params.id);
     if (!audience) return res.status(404).json({ ok:false, message:'Audience not found.' });
@@ -69,7 +66,7 @@ audiencesRouter.get('/:id', requirePermission('campaigns'), async (req, res, nex
   } catch (error) { next(error); }
 });
 
-audiencesRouter.post('/', requirePermission('campaigns'), async (req, res, next) => {
+audiencesRouter.post('/', async (req, res, next) => {
   try {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ ok:false, message:'Audience name is required.' });
@@ -88,7 +85,7 @@ audiencesRouter.post('/', requirePermission('campaigns'), async (req, res, next)
   } catch (error) { next(error); }
 });
 
-audiencesRouter.put('/:id', requirePermission('campaigns'), async (req, res, next) => {
+audiencesRouter.put('/:id', async (req, res, next) => {
   try {
     const existing = await getAudience(req.params.id);
     if (!existing) return res.status(404).json({ ok:false, message:'Audience not found.' });
@@ -109,7 +106,7 @@ audiencesRouter.put('/:id', requirePermission('campaigns'), async (req, res, nex
   } catch (error) { next(error); }
 });
 
-audiencesRouter.delete('/:id', requirePermission('campaigns'), async (req, res, next) => {
+audiencesRouter.delete('/:id', async (req, res, next) => {
   try {
     const result = await pool.query('DELETE FROM audiences WHERE id=$1', [req.params.id]);
     if (!result.rowCount) return res.status(404).json({ ok:false, message:'Audience not found.' });
