@@ -9,7 +9,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -27,12 +27,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  formatLicenseExpiry,
-  getLicenseStatus,
-  type LicenseStatus,
-  type LicenseType,
-} from "@/lib/licensing";
-import { useStore } from "@/lib/store";
+  generateLicenseFn,
+  listLicensesFn,
+  revokeLicenseFn,
+} from "@/server/license";
+import { getAuthFn } from "@/server/auth";
+import type { LicenseRow } from "@/server/license-store";
 
 export const Route = createFileRoute("/_app/key-generation")({
   head: () => ({
@@ -48,44 +48,48 @@ export const Route = createFileRoute("/_app/key-generation")({
   component: KeyGenerationPage,
 });
 
-function statusLabel(status: LicenseStatus) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
+type DisplayLicense = LicenseRow;
 
-function statusVariant(status: LicenseStatus): "default" | "secondary" | "destructive" | "outline" {
+function statusVariant(status: DisplayLicense["status"]): "default" | "secondary" | "destructive" | "outline" {
   if (status === "active") return "default";
   if (status === "revoked") return "destructive";
   if (status === "expired") return "secondary";
   return "outline";
 }
 
+function statusLabel(status: DisplayLicense["status"]) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function KeyGenerationPage() {
-  const { isOwner, state, createLicense, revokeLicense } = useStore();
+  const [owner, setOwner] = useState(false);
+  const [licenses, setLicenses] = useState<DisplayLicense[]>([]);
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const licenses = useMemo(
-    () =>
-      state.licenseKeys
-        .map((license) => {
-          const status = getLicenseStatus(license);
-          return status === license.status ? license : { ...license, status };
-        })
-        .filter((license) => {
-          const query = search.trim().toLowerCase();
-          if (!query) return true;
-          return (
-            license.key.toLowerCase().includes(query) ||
-            license.type.includes(query) ||
-            license.status.includes(query) ||
-            license.customerName.toLowerCase().includes(query) ||
-            license.customerEmail.toLowerCase().includes(query)
-          );
-        }),
-    [search, state.licenseKeys],
-  );
+  const load = async () => {
+    setLoading(true);
+    try {
+      const auth = await getAuthFn();
+      if (auth?.role !== "owner") {
+        setOwner(false);
+        return;
+      }
+      setOwner(true);
+      setLicenses(await listLicensesFn());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load license keys.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (!isOwner) {
+  useEffect(() => {
+    void load();
+  }, []);
+
+  if (!owner && !loading) {
     return (
       <div className="space-y-5">
         <PageHeader title="Key generation" />
@@ -98,24 +102,52 @@ function KeyGenerationPage() {
     );
   }
 
-
-  const total = state.licenseKeys.length;
-  const active = state.licenseKeys.filter((license) => getLicenseStatus(license) === "active").length;
-  const unused = state.licenseKeys.filter((license) => getLicenseStatus(license) === "unused").length;
-  const expired = state.licenseKeys.filter((license) => getLicenseStatus(license) === "expired").length;
-
-  const generate = (type: LicenseType) => {
-    const license = createLicense(type);
-    setLastGenerated(license.key);
-    void navigator.clipboard?.writeText(license.key);
-    toast.success(
-      type === "trial" ? "7-day trial key generated and copied" : "Permanent key generated and copied",
+  const filtered = licenses.filter((license) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      license.key.toLowerCase().includes(query) ||
+      license.type.includes(query) ||
+      license.status.includes(query) ||
+      license.customer_name.toLowerCase().includes(query) ||
+      license.customer_email.toLowerCase().includes(query)
     );
+  });
+
+  const active = licenses.filter((license) => license.status === "active").length;
+  const unused = licenses.filter((license) => license.status === "unused").length;
+  const expired = licenses.filter((license) => license.status === "expired").length;
+
+  const generate = async (type: "permanent" | "trial") => {
+    try {
+      const license = await generateLicenseFn({ data: { type } });
+      setLicenses((current) => [license, ...current]);
+      setLastGenerated(license.key);
+      void navigator.clipboard?.writeText(license.key);
+      toast.success(
+        type === "trial"
+          ? "7-day trial key generated and copied"
+          : "Permanent key generated and copied",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not generate key.");
+    }
   };
 
-  const revoke = (id: string) => {
-    revokeLicense(id);
-    toast.success("License revoked");
+  const revoke = async (id: string) => {
+    try {
+      const license = await revokeLicenseFn({ data: { id } });
+      if (!license) {
+        toast.error("License not found.");
+        return;
+      }
+      setLicenses((current) =>
+        current.map((item) => (item.id === id ? license : item)),
+      );
+      toast.success("License revoked");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revoke license.");
+    }
   };
 
   return (
@@ -127,7 +159,7 @@ function KeyGenerationPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Total keys", total],
+          ["Total keys", licenses.length],
           ["Active", active],
           ["Unused", unused],
           ["Expired", expired],
@@ -146,14 +178,14 @@ function KeyGenerationPage() {
           <CardTitle className="text-base">Generate a customer key</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <Button className="h-12 justify-start gap-3" onClick={() => generate("permanent")}>
+          <Button className="h-12 justify-start gap-3" onClick={() => void generate("permanent")}>
             <KeyRound className="size-5" aria-hidden="true" />
             <span>
               <span className="block text-left font-semibold">Permanent key</span>
               <span className="block text-left text-xs font-normal opacity-75">Lifetime access after activation</span>
             </span>
           </Button>
-          <Button variant="outline" className="h-12 justify-start gap-3" onClick={() => generate("trial")}>
+          <Button variant="outline" className="h-12 justify-start gap-3" onClick={() => void generate("trial")}>
             <Sparkles className="size-5" aria-hidden="true" />
             <span>
               <span className="block text-left font-semibold">7-day trial key</span>
@@ -196,18 +228,18 @@ function KeyGenerationPage() {
           />
         </CardHeader>
         <CardContent>
-          {licenses.length === 0 ? (
+          {filtered.length === 0 ? (
             <EmptyState
               icon={KeyRound}
-              title={search ? "No matching keys" : "No keys generated yet"}
+              title={loading ? "Loading keys…" : search ? "No matching keys" : "No keys generated yet"}
               description={
                 search
                   ? "Try another search term."
                   : "Generate a permanent or 7-day trial key to start selling access."
               }
               action={
-                !search ? (
-                  <Button onClick={() => generate("trial")}>
+                !loading && !search ? (
+                  <Button onClick={() => void generate("trial")}>
                     <Plus className="size-4" aria-hidden="true" />
                     Generate first key
                   </Button>
@@ -217,7 +249,7 @@ function KeyGenerationPage() {
           ) : (
             <>
               <div className="space-y-3 lg:hidden">
-                {licenses.map((license) => (
+                {filtered.map((license) => (
                   <div key={license.id} className="rounded-lg border border-border p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -232,18 +264,19 @@ function KeyGenerationPage() {
                       <div>
                         <p className="text-muted-foreground">Activated</p>
                         <p className="mt-0.5 font-medium">
-                          {license.activatedAt ? new Date(license.activatedAt).toLocaleDateString() : "Not yet"}
+                          {license.activated_at ? new Date(license.activated_at).toLocaleDateString() : "Not yet"}
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Expires</p>
-                        <p className="mt-0.5 font-medium">{formatLicenseExpiry(license.expiresAt)}</p>
+                        <p className="mt-0.5 font-medium">
+                          {license.expires_at ? new Date(license.expires_at).toLocaleDateString() : "Never"}
+                        </p>
                       </div>
                     </div>
-                    {license.customerName || license.customerEmail ? (
+                    {license.customer_name || license.customer_email ? (
                       <p className="mt-3 truncate text-xs text-muted-foreground">
-                        {license.customerName || "Customer"}
-                        {license.customerEmail ? " · " + license.customerEmail : ""}
+                        {license.customer_name || "Customer"}{license.customer_email ? " · " + license.customer_email : ""}
                       </p>
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -259,7 +292,7 @@ function KeyGenerationPage() {
                         Copy
                       </Button>
                       {license.status !== "revoked" ? (
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => revoke(license.id)}>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => void revoke(license.id)}>
                           <Trash2 className="size-3.5" aria-hidden="true" />
                           Revoke
                         </Button>
@@ -282,7 +315,7 @@ function KeyGenerationPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {licenses.map((license) => (
+                    {filtered.map((license) => (
                       <TableRow key={license.id}>
                         <TableCell className="font-mono text-xs font-semibold">{license.key}</TableCell>
                         <TableCell>{license.type === "permanent" ? "Permanent" : "7-day trial"}</TableCell>
@@ -290,16 +323,18 @@ function KeyGenerationPage() {
                           <Badge variant={statusVariant(license.status)}>{statusLabel(license.status)}</Badge>
                         </TableCell>
                         <TableCell className="max-w-56">
-                          {license.customerName || license.customerEmail ? (
+                          {license.customer_name || license.customer_email ? (
                             <span className="block truncate text-sm">
-                              {license.customerName || "Customer"}
-                              {license.customerEmail ? " · " + license.customerEmail : ""}
+                              {license.customer_name || "Customer"}
+                              {license.customer_email ? " · " + license.customer_email : ""}
                             </span>
                           ) : (
                             <span className="text-sm text-muted-foreground">Unassigned</span>
                           )}
                         </TableCell>
-                        <TableCell>{formatLicenseExpiry(license.expiresAt)}</TableCell>
+                        <TableCell>
+                          {license.expires_at ? new Date(license.expires_at).toLocaleDateString() : "Never"}
+                        </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
                             <Button
@@ -318,7 +353,7 @@ function KeyGenerationPage() {
                                 size="sm"
                                 variant="ghost"
                                 className="text-destructive"
-                                onClick={() => revoke(license.id)}
+                                onClick={() => void revoke(license.id)}
                                 aria-label={"Revoke " + license.key}
                               >
                                 <Trash2 className="size-4" />
@@ -342,8 +377,8 @@ function KeyGenerationPage() {
           <div className="text-sm leading-relaxed text-muted-foreground">
             <p className="font-semibold text-navy">License behavior</p>
             <p className="mt-1">
-              A 7-day trial begins when it is activated. A permanent key never expires. A revoked key immediately loses access in this browser.
-              License data follows the application's current browser-local demo storage model.
+              A 7-day trial begins when activated. A permanent key never expires. Revoked keys are rejected by the server.
+              License records are stored centrally and are not kept in browser storage.
             </p>
           </div>
         </CardContent>
@@ -351,7 +386,7 @@ function KeyGenerationPage() {
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <RotateCcw className="size-3.5" aria-hidden="true" />
-        Resetting the demo from Settings also removes all generated keys.
+        Generated license records are independent of the local workspace demo reset.
       </p>
     </div>
   );
