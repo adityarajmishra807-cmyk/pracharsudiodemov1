@@ -48,7 +48,7 @@ export const Route = createFileRoute("/_app/key-generation")({
   component: KeyGenerationPage,
 });
 
-type DisplayLicense = LicenseRow;
+type DisplayLicense = Awaited<ReturnType<typeof listLicensesFn>>[number];
 
 function statusVariant(status: DisplayLicense["status"]): "default" | "secondary" | "destructive" | "outline" {
   if (status === "active") return "default";
