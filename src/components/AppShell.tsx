@@ -1,5 +1,5 @@
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Bot, Building2, LayoutDashboard, LogOut, Megaphone, MoreHorizontal, Settings, ShieldCheck, Smartphone, Users, FileText, UserRound } from "lucide-react";
+import { BarChart3, Bot, Building2, LayoutDashboard, LogOut, Megaphone, MoreHorizontal, Settings, ShieldCheck, Smartphone, Users, FileText, UserRound, KeyRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PracharChatbot } from "@/components/ai/PracharChatbot";
 import { Logo } from "@/components/Logo";
@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: BarChart3, permission: "analytics" },
   { to: "/team", label: "Team", icon: Users, ownerOnly: true },
   { to: "/permissions", label: "Permissions", icon: ShieldCheck, ownerOnly: true },
+  { to: "/key-generation", label: "Key generation", icon: KeyRound, ownerOnly: true },
   { to: "/settings", label: "Settings", icon: Settings, permission: "settings" },
 ];
 function useVisibleNav() { const { isOwner, can } = useStore(); return NAV.filter((item) => { if (item.ownerOnly) return isOwner; if (!item.permission) return true; const keys = Array.isArray(item.permission) ? item.permission : [item.permission]; return keys.some((k) => can(k)); }); }
