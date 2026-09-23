@@ -15,6 +15,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
 import { Route as AppSessionsRouteImport } from './routes/_app/sessions'
+import { Route as AppKeyGenerationRouteImport } from './routes/_app/key-generation'
 import { Route as AppLeadsIndexRouteImport } from './routes/_app/leads/index'
 import { Route as AppLeadsLeadIdRouteImport } from './routes/_app/leads/$leadId'
 
@@ -30,6 +31,7 @@ const AppSettingsRoute = AppSettingsRouteImport.update({ id: '/settings', path: 
 const AppTeamRoute = AppTeamRouteImport.update({ id: '/team', path: '/team', getParentRoute: () => AppRoute } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({ id: '/templates', path: '/templates', getParentRoute: () => AppRoute } as any)
 const AppSessionsRoute = AppSessionsRouteImport.update({ id: '/sessions', path: '/sessions', getParentRoute: () => AppRoute } as any)
+const AppKeyGenerationRoute = AppKeyGenerationRouteImport.update({ id: '/key-generation', path: '/key-generation', getParentRoute: () => AppRoute } as any)
 const AppLeadsIndexRoute = AppLeadsIndexRouteImport.update({ id: '/leads/', path: '/leads/', getParentRoute: () => AppRoute } as any)
 const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({ id: '/leads/$leadId', path: '/leads/$leadId', getParentRoute: () => AppRoute } as any)
 
@@ -43,6 +45,7 @@ const AppRouteChildren = {
   AppTeamRoute,
   AppTemplatesRoute,
   AppSessionsRoute,
+  AppKeyGenerationRoute,
   AppLeadsLeadIdRoute,
   AppLeadsIndexRoute,
 }
