@@ -768,7 +768,19 @@ function SendPage() {
               </div>
             </div>
             </section>
-                   <section className="rounded-2xl border border-border bg-navy p-5 text-white shadow-sm">
+                   <Button
+            className="w-full"
+            size="lg"
+            disabled={busy || !instance || !recipients.length}
+            onClick={() => void send()}
+          >
+            <Send className="mr-2 size-4" />
+            {busy
+              ? `Sending ${progress.sent + progress.failed}/${progress.total}…`
+              : `Send to ${recipients.length || 0} recipients`}
+          </Button>
+
+          <section className="rounded-2xl border border-border bg-navy p-5 text-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wider text-white/60">
               Personalization
             </p>
