@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
 import { ownerLoginFn } from "@/lib/server-auth";
-import { activateLicenseFn } from "@/server/license";
+import { activateLicenseFn } from "@/lib/server-license";
 
 export const Route = createFileRoute("/")({
   head: () => ({
