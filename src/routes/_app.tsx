@@ -3,7 +3,7 @@ import { useEffect } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { useStore } from "@/lib/store";
-import { getAuthFn } from "@/server/auth";
+import { getAuthFn } from "@/lib/server-auth";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
