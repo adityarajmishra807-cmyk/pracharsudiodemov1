@@ -24,3 +24,24 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+
+## Secure licensing setup
+
+Prachar Studio now uses server-side authentication and centralized license records.
+
+Set these server environment variables before deployment:
+
+```text
+PRACHAR_OWNER_EMAIL=
+PRACHAR_OWNER_PASSWORD=
+PRACHAR_SESSION_SECRET=
+SUPABASE_URL=
+SUPABASE_SECRET_KEY=
+```
+
+Run the SQL migration in `supabase/migrations/003_secure_licensing.sql` against the connected Supabase project.
+
+Never prefix server secrets with `VITE_`. The Supabase secret key and owner credentials must remain server-only.
+
+Owner login creates an HTTP-only session. Customer activation creates a server session tied to a single-use license. Permanent licenses do not expire; trial licenses expire seven days after activation. Owner key generation and revocation require the server owner session.
