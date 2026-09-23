@@ -52,7 +52,7 @@ function SettingsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Settings"
-        description="Changes save instantly to this browser."
+        description="Workspace demo data saves in this browser. Authentication and licenses are server-controlled."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
