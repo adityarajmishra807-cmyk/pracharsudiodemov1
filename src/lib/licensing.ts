@@ -1,5 +1,3 @@
-import { formatDate } from "@/lib/store";
-
 export type LicenseType = "permanent" | "trial";
 export type LicenseStatus = "unused" | "active" | "expired" | "revoked";
 
@@ -59,7 +57,7 @@ export function getLicenseStatus(license: LicenseKey, at = new Date()): LicenseS
 }
 
 export function formatLicenseExpiry(expiresAt: string | null) {
-  return expiresAt ? formatDate(expiresAt) : "Never";
+  return expiresAt ? new Date(expiresAt).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "Never";
 }
 
 export function trialExpiry(from = new Date()) {
