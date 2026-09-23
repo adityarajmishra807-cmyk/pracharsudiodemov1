@@ -1,11 +1,8 @@
 import { Router } from 'express';
-import { authUser, requirePermission } from './auth.routes.js';
 import { config } from '../config.js';
 import { connectInstance, createInstance, deleteInstance, listInstances, logoutInstance, restartInstance, sendButtons, sendList, sendMedia, sendText, setWebhook } from '../services/evolution.service.js';
 
 export const sessionsRouter = Router();
-sessionsRouter.use(authUser);
-sessionsRouter.use(requirePermission('campaigns'));
 const instance = (req) => String(req.params.instance || '').trim();
 
 sessionsRouter.get('/', async (_req, res, next) => {
