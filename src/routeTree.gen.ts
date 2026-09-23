@@ -13,10 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AppAnalyticsRouteImport } from './routes/_app/analytics'
+import { Route as AppAudiencesRouteImport } from './routes/_app/audiences'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 import { Route as AppCampaignsRouteImport } from './routes/_app/campaigns'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppKeyGenerationRouteImport } from './routes/_app/key-generation'
 import { Route as AppPermissionsRouteImport } from './routes/_app/permissions'
+import { Route as AppSendRouteImport } from './routes/_app/send'
 import { Route as AppSessionsRouteImport } from './routes/_app/sessions'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
@@ -43,6 +46,11 @@ const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAudiencesRoute = AppAudiencesRouteImport.update({
+  id: '/audiences',
+  path: '/audiences',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAutomationsRoute = AppAutomationsRouteImport.update({
   id: '/automations',
   path: '/automations',
@@ -58,9 +66,19 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppKeyGenerationRoute = AppKeyGenerationRouteImport.update({
+  id: '/key-generation',
+  path: '/key-generation',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPermissionsRoute = AppPermissionsRouteImport.update({
   id: '/permissions',
   path: '/permissions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSendRoute = AppSendRouteImport.update({
+  id: '/send',
+  path: '/send',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSessionsRoute = AppSessionsRouteImport.update({
@@ -98,10 +116,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/terms': typeof TermsRoute
   '/analytics': typeof AppAnalyticsRoute
+  '/audiences': typeof AppAudiencesRoute
   '/automations': typeof AppAutomationsRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/key-generation': typeof AppKeyGenerationRoute
   '/permissions': typeof AppPermissionsRoute
+  '/send': typeof AppSendRoute
   '/sessions': typeof AppSessionsRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -113,10 +134,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/terms': typeof TermsRoute
   '/analytics': typeof AppAnalyticsRoute
+  '/audiences': typeof AppAudiencesRoute
   '/automations': typeof AppAutomationsRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/key-generation': typeof AppKeyGenerationRoute
   '/permissions': typeof AppPermissionsRoute
+  '/send': typeof AppSendRoute
   '/sessions': typeof AppSessionsRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -130,10 +154,13 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/terms': typeof TermsRoute
   '/_app/analytics': typeof AppAnalyticsRoute
+  '/_app/audiences': typeof AppAudiencesRoute
   '/_app/automations': typeof AppAutomationsRoute
   '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/key-generation': typeof AppKeyGenerationRoute
   '/_app/permissions': typeof AppPermissionsRoute
+  '/_app/send': typeof AppSendRoute
   '/_app/sessions': typeof AppSessionsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
@@ -147,10 +174,13 @@ export interface FileRouteTypes {
     | '/'
     | '/terms'
     | '/analytics'
+    | '/audiences'
     | '/automations'
     | '/campaigns'
     | '/dashboard'
+    | '/key-generation'
     | '/permissions'
+    | '/send'
     | '/sessions'
     | '/settings'
     | '/team'
@@ -162,10 +192,13 @@ export interface FileRouteTypes {
     | '/'
     | '/terms'
     | '/analytics'
+    | '/audiences'
     | '/automations'
     | '/campaigns'
     | '/dashboard'
+    | '/key-generation'
     | '/permissions'
+    | '/send'
     | '/sessions'
     | '/settings'
     | '/team'
@@ -178,10 +211,13 @@ export interface FileRouteTypes {
     | '/_app'
     | '/terms'
     | '/_app/analytics'
+    | '/_app/audiences'
     | '/_app/automations'
     | '/_app/campaigns'
     | '/_app/dashboard'
+    | '/_app/key-generation'
     | '/_app/permissions'
+    | '/_app/send'
     | '/_app/sessions'
     | '/_app/settings'
     | '/_app/team'
@@ -226,6 +262,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/audiences': {
+      id: '/_app/audiences'
+      path: '/audiences'
+      fullPath: '/audiences'
+      preLoaderRoute: typeof AppAudiencesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/automations': {
       id: '/_app/automations'
       path: '/automations'
@@ -247,11 +290,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/key-generation': {
+      id: '/_app/key-generation'
+      path: '/key-generation'
+      fullPath: '/key-generation'
+      preLoaderRoute: typeof AppKeyGenerationRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/permissions': {
       id: '/_app/permissions'
       path: '/permissions'
       fullPath: '/permissions'
       preLoaderRoute: typeof AppPermissionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/send': {
+      id: '/_app/send'
+      path: '/send'
+      fullPath: '/send'
+      preLoaderRoute: typeof AppSendRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/sessions': {
@@ -301,10 +358,13 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
+  AppAudiencesRoute: typeof AppAudiencesRoute
   AppAutomationsRoute: typeof AppAutomationsRoute
   AppCampaignsRoute: typeof AppCampaignsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppKeyGenerationRoute: typeof AppKeyGenerationRoute
   AppPermissionsRoute: typeof AppPermissionsRoute
+  AppSendRoute: typeof AppSendRoute
   AppSessionsRoute: typeof AppSessionsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -315,10 +375,13 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
+  AppAudiencesRoute: AppAudiencesRoute,
   AppAutomationsRoute: AppAutomationsRoute,
   AppCampaignsRoute: AppCampaignsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppKeyGenerationRoute: AppKeyGenerationRoute,
   AppPermissionsRoute: AppPermissionsRoute,
+  AppSendRoute: AppSendRoute,
   AppSessionsRoute: AppSessionsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,

@@ -1,3 +1,4 @@
+import { apiRequest } from "./api";
 export type Session = {
   instanceName?: string;
   status?: string;
@@ -17,26 +18,35 @@ export type ApiResponse = {
   message?: string;
 };
 
-// The frontend talks only to the WhatsApp backend. It never calls Evolution API.
+export type ButtonPayload = {
+  id: string;
+  displayText: string;
+};
+
+export type ListRow = {
+  title: string;
+  rowId: string;
+  description?: string;
+};
+
+export type ListSection = {
+  title?: string;
+  rows: ListRow[];
+};
+
+export type MediaPayload = {
+  base64: string;
+  mediatype: 'image' | 'video' | 'document';
+  mimetype: string;
+  fileName: string;
+};
+
 function backendBaseUrl() {
   const configured = String(import.meta.env.VITE_WHATSAPP_API_URL || '').trim().replace(/\/+$/, '');
   return configured || window.location.origin;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${backendBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init.headers || {}),
-    },
-    cache: 'no-store',
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Request failed (${response.status})`);
-  return body as T;
-}
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> { return apiRequest<T>(path, init); }
 
 export const sessionsApi = {
   list: () => request<Session[]>('/api/sessions'),
@@ -45,8 +55,15 @@ export const sessionsApi = {
   restart: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}/restart`, { method: 'POST' }),
   disconnect: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}/disconnect`, { method: 'POST' }),
   remove: (instance: string) => request(`/api/sessions/${encodeURIComponent(instance)}`, { method: 'DELETE' }),
-  sendText: (instance: string, number: string, text: string) => request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, {
-    method: 'POST',
-    body: JSON.stringify({ number, text }),
-  }),
+  sendText: (instance: string, number: string, text: string, options: { linkPreview?: boolean; delayMs?: number } = {}) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-text`, { method: 'POST', body: JSON.stringify({ number, text, ...options }) }),
+  sendButtons: (instance: string, number: string, payload: { text: string; buttons: ButtonPayload[] }) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-buttons`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
+  sendList: (instance: string, number: string, payload: { text: string; buttonText: string; sections: ListSection[] }) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-list`, { method: 'POST', body: JSON.stringify({ number, ...payload }) }),
+  sendMedia: (instance: string, number: string, media: MediaPayload, caption = '', delayMs = 0) =>
+    request(`/api/sessions/${encodeURIComponent(instance)}/send-media`, {
+      method: 'POST',
+      body: JSON.stringify({ number, media, caption, delayMs }),
+    }),
 };
