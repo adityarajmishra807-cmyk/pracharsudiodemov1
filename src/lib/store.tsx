@@ -169,7 +169,6 @@ export type Settings = {
 
 export type Session =
   | { kind: "owner" }
-  | { kind: "license"; licenseId: string; licenseType: "permanent" | "trial"; expiresAt: string | null }
   | { kind: "member"; memberId: string }
   | null;
 
@@ -216,7 +215,6 @@ type Store = {
   isOwner: boolean;
   currentMember: Member | null;
   can: (key: PermissionKey) => boolean;
-  isLicensed: boolean;
   addMember: (data: Omit<Member, "id" | "createdAt">) => Member;
   updateMember: (id: string, data: Partial<Member>) => void;
   removeMember: (id: string) => void;
@@ -252,14 +250,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<State>;
-        setState({
-          ...emptyState,
-          ...parsed,
-          session: null,
-        });
-      }
+      if (raw) setState({ ...emptyState, ...(JSON.parse(raw) as State) });
     } catch {
       /* ignore corrupt storage */
     }
@@ -279,8 +270,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return state.members.find((m) => m.id === session.memberId) ?? null;
   }, [state.session, state.members]);
 
-  const isOwner = state.session?.kind === "owner";
-  const isLicensed = state.session?.kind === "license";
+  const isOwner = true;
 
   const value: Store = useMemo(() => {
     const memberName = (id: string | null) => {
@@ -293,10 +283,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ready,
       state,
       isOwner,
-      isLicensed,
       currentMember,
       memberName,
-      can: (key) => (isOwner || isLicensed ? true : !!currentMember?.permissions[key]),
+      can: () => true,
       signIn: (session) => patch((s) => ({ ...s, session })),
       signOut: () => patch((s) => ({ ...s, session: null })),
 
@@ -453,9 +442,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       updateSettings: (data) =>
         patch((s) => ({ ...s, settings: { ...s.settings, ...data } })),
-      resetDemo: () => setState({ ...emptyState, session: null }),
+      resetDemo: () => setState({ ...emptyState, session: { kind: "owner" } }),
     };
-  }, [state, ready, isOwner, isLicensed, currentMember, patch]);
+  }, [state, ready, isOwner, currentMember, patch]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

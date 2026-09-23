@@ -34,14 +34,51 @@ function SessionsPage() {
   const filtered = data.filter((s) => { const q = query.toLowerCase(); return !q || String(s.instanceName || "").toLowerCase().includes(q) || number(s).includes(q); });
   const busy = mutations.restart.isPending || mutations.disconnect.isPending || mutations.remove.isPending;
 
+  const extractQr = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") return null;
+    const item = value as Record<string, unknown>;
+    const candidates = [
+      item.base64,
+      item.qr,
+      item.qrcode,
+      item.qrCode,
+      item.qr_code,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+      if (candidate && typeof candidate === "object") {
+        const nested = extractQr(candidate);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  };
+
   const connect = async (session: Session) => {
     try {
-      const d = await sessionsApi.connect(session.instanceName!);
-      const image = d.base64 || d.qrcode || d.qr || d.code;
-      if (image) setQr({ instance: session.instanceName!, value: image.startsWith("data:image") ? image : `data:image/png;base64,${image}` });
-      else toast.success(d.message || "Connection request sent");
+      let d: any = await sessionsApi.connect(session.instanceName!);
+      let image = extractQr(d);
+
+      // Evolution can create the QR asynchronously. Poll briefly so the
+      // terminal QR and the UI stay in sync instead of showing only "connecting".
+      for (let attempt = 0; !image && attempt < 8; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        d = await sessionsApi.connect(session.instanceName!);
+        image = extractQr(d);
+      }
+
+      if (image) {
+        const value = image.startsWith("data:image")
+          ? image
+          : `data:image/png;base64,${image}`;
+        setQr({ instance: session.instanceName!, value });
+      } else {
+        toast.success(d?.message || "Connection request sent. QR is still being generated.");
+      }
       await refetch();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Could not connect session"); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not connect session");
+    }
   };
 
   const create = async () => {

@@ -7,14 +7,16 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppAnalyticsRouteImport } from './routes/_app/analytics'
+import { Route as AppAudiencesRouteImport } from './routes/_app/audiences'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 import { Route as AppCampaignsRouteImport } from './routes/_app/campaigns'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppPermissionsRouteImport } from './routes/_app/permissions'
+import { Route as AppSendRouteImport } from './routes/_app/send'
+import { Route as AppSessionsRouteImport } from './routes/_app/sessions'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
-import { Route as AppSessionsRouteImport } from './routes/_app/sessions'
 import { Route as AppKeyGenerationRouteImport } from './routes/_app/key-generation'
 import { Route as AppLeadsIndexRouteImport } from './routes/_app/leads/index'
 import { Route as AppLeadsLeadIdRouteImport } from './routes/_app/leads/$leadId'
@@ -23,28 +25,32 @@ const IndexRoute = IndexRouteImport.update({ id: '/', path: '/', getParentRoute:
 const TermsRoute = TermsRouteImport.update({ id: '/terms', path: '/terms', getParentRoute: () => rootRouteImport } as any)
 const AppRoute = AppRouteImport.update({ id: '/_app', getParentRoute: () => rootRouteImport } as any)
 const AppAnalyticsRoute = AppAnalyticsRouteImport.update({ id: '/analytics', path: '/analytics', getParentRoute: () => AppRoute } as any)
+const AppAudiencesRoute = AppAudiencesRouteImport.update({ id: '/audiences', path: '/audiences', getParentRoute: () => AppRoute } as any)
 const AppAutomationsRoute = AppAutomationsRouteImport.update({ id: '/automations', path: '/automations', getParentRoute: () => AppRoute } as any)
 const AppCampaignsRoute = AppCampaignsRouteImport.update({ id: '/campaigns', path: '/campaigns', getParentRoute: () => AppRoute } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({ id: '/dashboard', path: '/dashboard', getParentRoute: () => AppRoute } as any)
 const AppPermissionsRoute = AppPermissionsRouteImport.update({ id: '/permissions', path: '/permissions', getParentRoute: () => AppRoute } as any)
+const AppSendRoute = AppSendRouteImport.update({ id: '/send', path: '/send', getParentRoute: () => AppRoute } as any)
+const AppSessionsRoute = AppSessionsRouteImport.update({ id: '/sessions', path: '/sessions', getParentRoute: () => AppRoute } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({ id: '/settings', path: '/settings', getParentRoute: () => AppRoute } as any)
 const AppTeamRoute = AppTeamRouteImport.update({ id: '/team', path: '/team', getParentRoute: () => AppRoute } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({ id: '/templates', path: '/templates', getParentRoute: () => AppRoute } as any)
-const AppSessionsRoute = AppSessionsRouteImport.update({ id: '/sessions', path: '/sessions', getParentRoute: () => AppRoute } as any)
 const AppKeyGenerationRoute = AppKeyGenerationRouteImport.update({ id: '/key-generation', path: '/key-generation', getParentRoute: () => AppRoute } as any)
 const AppLeadsIndexRoute = AppLeadsIndexRouteImport.update({ id: '/leads/', path: '/leads/', getParentRoute: () => AppRoute } as any)
 const AppLeadsLeadIdRoute = AppLeadsLeadIdRouteImport.update({ id: '/leads/$leadId', path: '/leads/$leadId', getParentRoute: () => AppRoute } as any)
 
 const AppRouteChildren = {
   AppAnalyticsRoute,
+  AppAudiencesRoute,
   AppAutomationsRoute,
   AppCampaignsRoute,
   AppDashboardRoute,
   AppPermissionsRoute,
+  AppSendRoute,
+  AppSessionsRoute,
   AppSettingsRoute,
   AppTeamRoute,
   AppTemplatesRoute,
-  AppSessionsRoute,
   AppKeyGenerationRoute,
   AppLeadsLeadIdRoute,
   AppLeadsIndexRoute,
