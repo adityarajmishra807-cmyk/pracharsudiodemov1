@@ -1,10 +1,7 @@
 import { Router } from "express";
-import { authUser, requirePermission } from "./auth.routes.js";
 import { sendButtons, sendList, sendMedia, sendText } from "../services/evolution.service.js";
 
 export const campaignsRouter = Router();
-campaignsRouter.use(authUser);
-campaignsRouter.use(requirePermission('campaigns'));
 
 const MAX_RECIPIENTS = 250;
 const MIN_DELAY_MS = 1200;
