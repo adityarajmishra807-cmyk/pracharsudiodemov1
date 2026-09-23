@@ -2,7 +2,7 @@ import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { BarChart3, Bot, Building2, LayoutDashboard, LogOut, Megaphone, MoreHorizontal, Settings, ShieldCheck, Smartphone, Users, FileText, UserRound, KeyRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PracharChatbot } from "@/components/ai/PracharChatbot";
-import { logoutFn } from "@/server/auth";
+import { logoutFn } from "@/lib/server-auth";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
